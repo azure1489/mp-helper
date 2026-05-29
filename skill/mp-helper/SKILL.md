@@ -10,6 +10,16 @@ description: >-
   草稿箱）；③ 健康检查。一把 API Key 对应一个公众号。不要用于：直接群发/正式发布给粉丝
   （本 skill 只到草稿箱）、视频/语音素材、公众号菜单/自动回复/客服/模板消息/IP白名单等
   配置、微信个人号或好友群发、其它平台（微博/小红书）、微信小程序/企业微信/微信支付。
+version: 1.0.0
+required_environment_variables:
+  - name: MP_HELPER_API_URL
+    prompt: mp-helper 服务地址（mp-server 的 https 地址）
+    help: 例如 https://mp-helper.aworld.ltd
+    required_for: 全部功能
+  - name: MP_HELPER_API_KEY
+    prompt: mp-helper 业务 API Key（一把 key 对应一个公众号）
+    help: 由运维用 admin 接口签发；服务部署在 https://mp-helper.aworld.ltd
+    required_for: 全部功能
 ---
 
 # mp-helper —— 微信公众号素材与草稿助手
@@ -58,12 +68,14 @@ appid/secret 与 access_token）。
   - Windows x86_64：`https://mp-helper.aworld.ltd/download/mp-cli-windows-amd64.exe`
 
   ```bash
-  # Linux/macOS 自动识别并安装
+  # Linux/macOS 自动识别并安装（免 sudo，适配沙箱）
   base=https://mp-helper.aworld.ltd/download
   case "$(uname -s)-$(uname -m)" in
     Linux-x86_64) f=mp-cli-linux-amd64;; Darwin-arm64) f=mp-cli-darwin-arm64;;
   esac
-  curl -fsSL -o mp-cli "$base/$f" && chmod +x mp-cli && sudo install mp-cli /usr/local/bin/mp-cli
+  mkdir -p "$HOME/.local/bin"
+  curl -fsSL -o "$HOME/.local/bin/mp-cli" "$base/$f" && chmod +x "$HOME/.local/bin/mp-cli"
+  export PATH="$HOME/.local/bin:$PATH"   # 确保在 PATH（写进 profile 持久化）
   ```
 - 环境变量已配置：
   - `MP_HELPER_API_URL`：mp-server 地址，如 `https://mp-helper.aworld.ltd`
