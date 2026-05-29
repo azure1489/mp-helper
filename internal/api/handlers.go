@@ -34,7 +34,7 @@ func (s *Server) handleUploadMaterial(c *gin.Context) {
 
 	mediaID, url, err := s.wechat.UploadMaterial(acc.AppID, acc.AppSecret, mtype, fh.Filename, f)
 	if err != nil {
-		respondWechatError(c, err.Error(), 0)
+		respondWechatError(c, err)
 		return
 	}
 	c.JSON(200, types.MaterialResponse{MediaID: mediaID, URL: url})
@@ -62,7 +62,7 @@ func (s *Server) handleCreateDraft(c *gin.Context) {
 
 	mediaID, err := s.wechat.AddDraft(acc.AppID, acc.AppSecret, req.Articles)
 	if err != nil {
-		respondWechatError(c, err.Error(), 0)
+		respondWechatError(c, err)
 		return
 	}
 	c.JSON(200, types.DraftResponse{MediaID: mediaID})

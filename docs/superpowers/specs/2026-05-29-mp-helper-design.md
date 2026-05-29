@@ -38,7 +38,7 @@
 | 数据访问 | `database/sql` + 原生 SQL + 内嵌 `schema.sql` | 不引 ORM |
 | 运行配置 | YAML（`gopkg.in/yaml.v3`） | 端口、DB 路径、admin token、Redis 开关 |
 | token 缓存 | 内存（默认），可选 Redis | 复用 silenceper `cache` |
-| Skill 二进制分发 | 源码 `go build` | 需 Go 1.22+ 工具链 |
+| Skill 二进制分发 | 源码 `go build` | 需 Go 1.25+ 工具链（gin 依赖；Go 1.21+ 可经 toolchain 自动下载） |
 | Skill 形态 | 通用 agent skill（`SKILL.md`） | 不绑定特定 agent 工具 |
 
 ## 3. 架构与数据流
@@ -296,7 +296,7 @@ mp-cli draft create \
 
 agent 无关，不硬编码特定 agent 的 skills 路径：
 
-1. **前置**：Go 1.22+（编译 CLI）；能访问 Web 服务；已从运维处拿到 `MP_HELPER_API_URL` 与 `MP_HELPER_API_KEY`。
+1. **前置**：Go 1.25+（编译 CLI；go.mod 声明 `go 1.25`，Go 1.21+ 可经 toolchain 自动下载）；能访问 Web 服务；已从运维处拿到 `MP_HELPER_API_URL` 与 `MP_HELPER_API_KEY`。
 2. **编译 CLI**：`make cli` 或 `go build -o <bindir>/mp-cli ./cmd/mp-cli`；把 `mp-cli` 放到 PATH。
 3. **配置环境变量**：导出 `MP_HELPER_API_URL`、`MP_HELPER_API_KEY`。
 4. **安装 skill**：把 `skill/mp-helper/`（含 `SKILL.md`）复制到「你所用 agent 的 skills 目录」。给出常见示例而非唯一路径：
