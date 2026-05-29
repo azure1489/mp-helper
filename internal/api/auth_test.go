@@ -69,6 +69,14 @@ func TestAdminAuth(t *testing.T) {
 	}
 
 	req = httptest.NewRequest("GET", "/a", nil)
+	req.Header.Set("Authorization", "Bearer wrongtoken")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong token status = %d want 401", w.Code)
+	}
+
+	req = httptest.NewRequest("GET", "/a", nil)
 	req.Header.Set("Authorization", "Bearer topsecret")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
