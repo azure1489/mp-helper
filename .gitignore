@@ -1,7 +1,11 @@
 # 构建产物
 /bin/
+/dist/
 /mp-server
 /mp-cli
+
+# 部署私密配置（含密钥）
+/deploy/.env
 
 # SQLite 数据库文件
 *.db

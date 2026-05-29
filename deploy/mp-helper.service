@@ -1,0 +1,22 @@
+[Unit]
+Description=mp-helper WeChat official account service
+Documentation=https://github.com/azure1489/mp-helper
+After=docker.service network-online.target
+Wants=network-online.target
+# 监听 172.17.0.1（docker0），需 docker 先就绪
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/mp-helper
+ExecStart=/opt/mp-helper/mp-server --config /opt/mp-helper/config.yaml
+Restart=always
+RestartSec=3
+User=root
+NoNewPrivileges=true
+# 日志走 journald：journalctl -u mp-helper -f
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

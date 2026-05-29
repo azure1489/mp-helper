@@ -1,0 +1,8 @@
+# 由 deploy.sh 渲染后上传到服务器 /opt/mp-helper/config.yaml
+# 占位符 __BIND__ / __ADMIN__ / __DBPATH__ 会被替换；本模板不含任何密钥。
+listen: "__BIND__"
+db_path: "__DBPATH__"
+admin_token: "__ADMIN__"
+cache:
+  type: "memory"
+wechat_timeout_seconds: 30
