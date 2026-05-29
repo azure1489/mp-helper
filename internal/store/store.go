@@ -29,9 +29,11 @@ func Open(path string) (*Store, error) {
 	// SQLite 写并发差，限制单连接，确保 PRAGMA 生效且避免锁冲突。
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 	if _, err := db.Exec(schemaSQL); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	return &Store{db: db}, nil

@@ -1,6 +1,9 @@
 package store
 
-import "database/sql"
+import (
+	"database/sql"
+	"errors"
+)
 
 // Account 是一个公众号配置。
 type Account struct {
@@ -26,7 +29,7 @@ func (s *Store) GetAccount(id int64) (*Account, error) {
 	err := s.db.QueryRow(
 		`SELECT id, name, appid, app_secret FROM accounts WHERE id = ?`, id).
 		Scan(&a.ID, &a.Name, &a.AppID, &a.AppSecret)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -52,25 +55,25 @@ func (s *Store) ListAccounts() ([]*Account, error) {
 	return out, rows.Err()
 }
 
-// UpdateAccount 部分更新：非 nil 字段才更新。
+// UpdateAccount 部分更新：仅非 nil 字段被更新。
+// 用单条 COALESCE 语句原子完成，避免读改写竞态（nil 的 *string 绑定为 NULL → 保留原值）。
 func (s *Store) UpdateAccount(id int64, name, appid, secret *string) error {
-	a, err := s.GetAccount(id)
+	res, err := s.db.Exec(
+		`UPDATE accounts
+		    SET name       = COALESCE(?, name),
+		        appid      = COALESCE(?, appid),
+		        app_secret = COALESCE(?, app_secret),
+		        updated_at = CURRENT_TIMESTAMP
+		  WHERE id = ?`,
+		name, appid, secret, id)
 	if err != nil {
 		return err
 	}
-	if name != nil {
-		a.Name = *name
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
 	}
-	if appid != nil {
-		a.AppID = *appid
-	}
-	if secret != nil {
-		a.AppSecret = *secret
-	}
-	_, err = s.db.Exec(
-		`UPDATE accounts SET name=?, appid=?, app_secret=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		a.Name, a.AppID, a.AppSecret, id)
-	return err
+	return nil
 }
 
 func (s *Store) DeleteAccount(id int64) error {

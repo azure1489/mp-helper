@@ -52,3 +52,11 @@ func TestCreateAccountDuplicateName(t *testing.T) {
 		t.Fatal("expected unique constraint error")
 	}
 }
+
+func TestUpdateAccountNotFound(t *testing.T) {
+	s := newTestStore(t)
+	name := "x"
+	if err := s.UpdateAccount(999, &name, nil, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}

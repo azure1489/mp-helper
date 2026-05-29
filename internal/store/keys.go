@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 )
 
 // APIKey 是一把业务 API Key 的元数据（不含明文）。
@@ -93,7 +94,7 @@ func (s *Store) ResolveAccountByKey(plaintext string) (*Account, error) {
 		  WHERE k.key_hash = ? AND k.revoked_at IS NULL`,
 		HashKey(plaintext)).
 		Scan(&a.ID, &a.Name, &a.AppID, &a.AppSecret)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {

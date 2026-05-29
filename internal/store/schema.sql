@@ -17,5 +17,5 @@ CREATE TABLE IF NOT EXISTS api_keys (
     revoked_at  DATETIME
 );
 
-CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+-- key_hash 的 UNIQUE 约束已隐式建唯一索引，无需再显式建。
 CREATE INDEX IF NOT EXISTS idx_api_keys_account ON api_keys(account_id);
