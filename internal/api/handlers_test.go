@@ -86,3 +86,56 @@ func TestUploadMaterialMissingFile(t *testing.T) {
 		t.Fatalf("status = %d want 400", w.Code)
 	}
 }
+
+func TestCreateDraft(t *testing.T) {
+	fw := &fakeWechat{draftMediaID: "draft987"}
+	s := &Server{wechat: fw}
+	r := gin.New()
+	r.POST("/api/v1/drafts", withAccount(), s.handleCreateDraft)
+
+	body, _ := json.Marshal(types.DraftRequest{Articles: []types.Article{
+		{Title: "T", Content: "<p>c</p>", ThumbMediaID: "m1"},
+	}})
+	req := httptest.NewRequest("POST", "/api/v1/drafts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var dr types.DraftResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &dr)
+	if dr.MediaID != "draft987" {
+		t.Fatalf("resp = %+v", dr)
+	}
+	if len(fw.gotArticles) != 1 || fw.gotArticles[0].Title != "T" {
+		t.Fatalf("forwarded articles = %+v", fw.gotArticles)
+	}
+}
+
+func TestCreateDraftValidation(t *testing.T) {
+	s := &Server{wechat: &fakeWechat{}}
+	r := gin.New()
+	r.POST("/api/v1/drafts", withAccount(), s.handleCreateDraft)
+
+	// 空 articles
+	body, _ := json.Marshal(types.DraftRequest{})
+	req := httptest.NewRequest("POST", "/api/v1/drafts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 400 {
+		t.Fatalf("empty articles status = %d want 400", w.Code)
+	}
+
+	// 缺 thumb_media_id
+	body, _ = json.Marshal(types.DraftRequest{Articles: []types.Article{{Title: "t", Content: "c"}}})
+	req = httptest.NewRequest("POST", "/api/v1/drafts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 400 {
+		t.Fatalf("missing thumb status = %d want 400", w.Code)
+	}
+}

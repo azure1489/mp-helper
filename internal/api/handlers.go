@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -37,4 +38,32 @@ func (s *Server) handleUploadMaterial(c *gin.Context) {
 		return
 	}
 	c.JSON(200, types.MaterialResponse{MediaID: mediaID, URL: url})
+}
+
+func (s *Server) handleCreateDraft(c *gin.Context) {
+	acc := accountFromContext(c)
+
+	var req types.DraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, http.StatusBadRequest, "bad_request", "invalid json body")
+		return
+	}
+	if len(req.Articles) == 0 {
+		respondError(c, http.StatusBadRequest, "bad_request", "articles must not be empty")
+		return
+	}
+	for i, a := range req.Articles {
+		if a.Title == "" || a.Content == "" || a.ThumbMediaID == "" {
+			respondError(c, http.StatusBadRequest, "bad_request",
+				fmt.Sprintf("article[%d] requires title, content and thumb_media_id", i))
+			return
+		}
+	}
+
+	mediaID, err := s.wechat.AddDraft(acc.AppID, acc.AppSecret, req.Articles)
+	if err != nil {
+		respondWechatError(c, err.Error(), 0)
+		return
+	}
+	c.JSON(200, types.DraftResponse{MediaID: mediaID})
 }
