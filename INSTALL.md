@@ -2,6 +2,20 @@
 
 本文件指导 agent 在本机安装 `mp-helper` skill。skill 通用、不绑定特定 agent 工具。
 
+## 这个 skill 是什么 / 何时用
+
+`mp-helper` 让 agent 通过 `mp-cli` 操作**微信公众号**：把图片上传为永久素材、把图文文章
+创建到**草稿箱**。
+
+- **能做**：① 上传图片素材（得 `media_id` 作封面 + `url` 供正文引用）；② 创建图文草稿
+  到草稿箱（得草稿 `media_id`）；③ 健康检查。一把 API Key 对应一个公众号。
+- **何时用**：用户想「发/推送到微信公众号」「放进公众号草稿箱」「上传公众号图片/封面」
+  「把文章排版成公众号图文」时。
+- **不适用**：直接群发（仅到草稿箱为止，群发由作者在后台手动确认）；视频/语音素材；
+  公众号菜单/自动回复/客服/模板消息；小程序/企业微信/微信支付。
+
+> 完整功能、工作流、命令与错误码说明见 `skill/mp-helper/SKILL.md`（安装后即 agent 运行时读取的文件）。
+
 ## 前置条件
 
 - 能访问 mp-server；已从运维处获得：
@@ -64,11 +78,11 @@ export MP_HELPER_API_KEY="mpk_xxx"
 - Claude Code（项目内）：`<project>/.claude/skills/mp-helper/`
 - 其它 agent：复制到其等价的 skills 目录
 
-`SKILL.md` 可直接在线获取（无需克隆源码）：
+`SKILL.md` 可直接从服务域名在线获取（无需克隆源码，也不依赖 GitHub 仓库可见性）：
 ```bash
 mkdir -p ~/.claude/skills/mp-helper
 curl -fsSL -o ~/.claude/skills/mp-helper/SKILL.md \
-  https://raw.githubusercontent.com/azure1489/mp-helper/main/skill/mp-helper/SKILL.md
+  https://mp-helper.aworld.ltd/download/SKILL.md
 ```
 
 ### 4. 验证

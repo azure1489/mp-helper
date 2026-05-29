@@ -37,9 +37,13 @@ echo ">> sha256"
 echo ">> upload to ${REMOTE}:${DL_DIR}"
 ssh "${SSH_OPTS[@]}" "$REMOTE" "mkdir -p '${DL_DIR}'"
 scp "${SCP_OPTS[@]}" "${OUT}"/* "${REMOTE}:${DL_DIR}/"
+# 同时托管 skill 文档，使「下载即装」无需依赖 GitHub 仓库可见性
+scp "${SCP_OPTS[@]}" skill/mp-helper/SKILL.md INSTALL.md "${REMOTE}:${DL_DIR}/"
 
 echo ">> 完成。下载地址："
 echo "   https://${DOMAIN}/download/mp-cli-linux-amd64"
 echo "   https://${DOMAIN}/download/mp-cli-windows-amd64.exe"
 echo "   https://${DOMAIN}/download/mp-cli-darwin-arm64"
 echo "   https://${DOMAIN}/download/sha256sums.txt"
+echo "   https://${DOMAIN}/download/SKILL.md"
+echo "   https://${DOMAIN}/download/INSTALL.md"
