@@ -52,7 +52,7 @@ func TestUploadMaterial(t *testing.T) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	fwpart, _ := mw.CreateFormFile("file", "x.png")
-	fwpart.Write([]byte("PNGDATA"))
+	_, _ = fwpart.Write([]byte("PNGDATA"))
 	mw.Close()
 
 	req := httptest.NewRequest("POST", "/api/v1/materials", &buf)
@@ -84,6 +84,27 @@ func TestUploadMaterialMissingFile(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != 400 {
 		t.Fatalf("status = %d want 400", w.Code)
+	}
+}
+
+func TestUploadMaterialBadType(t *testing.T) {
+	s := &Server{wechat: &fakeWechat{}}
+	r := gin.New()
+	r.POST("/api/v1/materials", withAccount(), s.handleUploadMaterial)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	_ = mw.WriteField("type", "video")
+	fwpart, _ := mw.CreateFormFile("file", "x.mp4")
+	_, _ = fwpart.Write([]byte("DATA"))
+	mw.Close()
+
+	req := httptest.NewRequest("POST", "/api/v1/materials", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 400 {
+		t.Fatalf("unsupported type status = %d want 400", w.Code)
 	}
 }
 
