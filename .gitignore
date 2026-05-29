@@ -1,0 +1,16 @@
+# 构建产物
+/bin/
+/mp-server
+/mp-cli
+
+# SQLite 数据库文件
+*.db
+*.db-shm
+*.db-wal
+
+# 本地配置（含密钥，勿提交）
+/config.yaml
+/config.yml
+
+# 编辑器/系统
+.DS_Store
