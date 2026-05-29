@@ -42,6 +42,9 @@ func TestUploadMaterialSendsMultipartAndAuth(t *testing.T) {
 		if _, _, err := r.FormFile("file"); err != nil {
 			t.Errorf("file field missing: %v", err)
 		}
+		if got := r.FormValue("type"); got != "image" {
+			t.Errorf("type field = %q want image", got)
+		}
 		_ = json.NewEncoder(w).Encode(types.MaterialResponse{MediaID: "m1", URL: "u1"})
 	}))
 	defer ts.Close()
