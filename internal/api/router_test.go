@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"github.com/azure1489/mp-helper/internal/config"
 	"github.com/azure1489/mp-helper/internal/store"
 )
@@ -52,5 +51,4 @@ func TestRouterWiring(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("admin with token status = %d want 200", w.Code)
 	}
-	_ = gin.Mode()
 }
