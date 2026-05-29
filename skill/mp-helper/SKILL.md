@@ -9,9 +9,21 @@ description: Use when the user wants to upload images to a WeChat Official Accou
 
 ## 前置条件
 
-- `mp-cli` 已在 PATH（安装见仓库 `INSTALL.md`）。
+- `mp-cli` 已在 PATH。若没有，下载对应平台预编译二进制（无需 Go；详见 `INSTALL.md`）：
+  - Linux x86_64：`https://mp-helper.aworld.ltd/download/mp-cli-linux-amd64`
+  - macOS Apple Silicon：`https://mp-helper.aworld.ltd/download/mp-cli-darwin-arm64`
+  - Windows x86_64：`https://mp-helper.aworld.ltd/download/mp-cli-windows-amd64.exe`
+
+  ```bash
+  # Linux/macOS 自动识别并安装
+  base=https://mp-helper.aworld.ltd/download
+  case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64) f=mp-cli-linux-amd64;; Darwin-arm64) f=mp-cli-darwin-arm64;;
+  esac
+  curl -fsSL -o mp-cli "$base/$f" && chmod +x mp-cli && sudo install mp-cli /usr/local/bin/mp-cli
+  ```
 - 环境变量已配置：
-  - `MP_HELPER_API_URL`：mp-server 地址，如 `https://mp.example.com`
+  - `MP_HELPER_API_URL`：mp-server 地址，如 `https://mp-helper.aworld.ltd`
   - `MP_HELPER_API_KEY`：业务 API Key（一把 key 对应一个公众号）
 
 ## 标准工作流

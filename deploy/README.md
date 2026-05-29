@@ -33,6 +33,22 @@ cp deploy/.env.example deploy/.env
 脚本会：交叉编译 linux/amd64 → 上传 → 首次生成 `config.yaml` → 启用并重启 `mp-helper` 服务 → `nginx -t` 通过后 reload → healthz 自检。
 重复执行即“更新”：仅替换二进制并重启，**不覆盖**已有 `config.yaml` 与数据库。
 
+## 发布 mp-cli 多平台下载
+
+把 `mp-cli` 编译为 linux/amd64、windows/amd64、darwin/arm64，并发布到服务器，经 nginx 静态目录对外提供下载（供安装 skill 时按平台直接下载，无需 Go）：
+
+```bash
+./deploy/release-cli.sh
+```
+
+产出下载地址：
+- `https://mp-helper.aworld.ltd/download/mp-cli-linux-amd64`
+- `https://mp-helper.aworld.ltd/download/mp-cli-darwin-arm64`
+- `https://mp-helper.aworld.ltd/download/mp-cli-windows-amd64.exe`
+- `https://mp-helper.aworld.ltd/download/sha256sums.txt`
+
+nginx 站点配置里的 `location /download/` 指向 `/usr/share/nginx/html/mp-helper/download/`（宿主 `/opt/docker/nginx/html/mp-helper/download/`）。
+
 ## DNS
 
 外部访问需把 `mp-helper.aworld.ltd` 的 A 记录指向服务器公网 IP（`8.138.43.109`）。
