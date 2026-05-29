@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -74,3 +75,44 @@ func TestAdminAccountCRUD(t *testing.T) {
 		t.Fatalf("delete status = %d", w.Code)
 	}
 }
+
+func TestAdminKeyFlow(t *testing.T) {
+	s, r := adminServer(t)
+	r.POST("/admin/accounts/:id/keys", s.handleCreateKey)
+	r.GET("/admin/keys", s.handleListKeys)
+	r.DELETE("/admin/keys/:id", s.handleRevokeKey)
+
+	acc, _ := s.store.CreateAccount("gz", "appK", "secK")
+
+	// create key
+	req := httptest.NewRequest("POST", "/admin/accounts/"+itoa(acc.ID)+"/keys", bytes.NewReader([]byte(`{"label":"ci"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create key status = %d body=%s", w.Code, w.Body.String())
+	}
+	var ck types.CreateKeyResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &ck)
+	if ck.Key == "" || ck.Prefix == "" {
+		t.Fatalf("create key resp = %+v", ck)
+	}
+
+	// list keys (无明文)
+	req = httptest.NewRequest("GET", "/admin/keys", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if bytes.Contains(w.Body.Bytes(), []byte(ck.Key)) {
+		t.Fatal("list must not expose plaintext key")
+	}
+
+	// revoke
+	req = httptest.NewRequest("DELETE", "/admin/keys/"+itoa(ck.ID), nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 204 {
+		t.Fatalf("revoke status = %d", w.Code)
+	}
+}
+
+func itoa(i int64) string { return strconv.FormatInt(i, 10) }

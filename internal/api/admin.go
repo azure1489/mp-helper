@@ -112,3 +112,59 @@ func (s *Server) handleDeleteAccount(c *gin.Context) {
 	s.wechat.Invalidate(a.AppID)
 	c.Status(http.StatusNoContent)
 }
+
+func (s *Server) handleCreateKey(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	var req types.CreateKeyRequest
+	_ = c.ShouldBindJSON(&req) // label 可选，忽略解析错误
+	keyID, plaintext, prefix, err := s.store.CreateKey(id, req.Label)
+	if errors.Is(err, store.ErrNotFound) {
+		respondError(c, http.StatusNotFound, "not_found", "account not found")
+		return
+	}
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	c.JSON(http.StatusCreated, types.CreateKeyResponse{ID: keyID, Key: plaintext, Prefix: prefix})
+}
+
+func (s *Server) handleListKeys(c *gin.Context) {
+	keys, err := s.store.ListKeys()
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	out := make([]types.KeyResponse, 0, len(keys))
+	for _, k := range keys {
+		kr := types.KeyResponse{
+			ID: k.ID, AccountID: k.AccountID, Prefix: k.Prefix,
+			Label: k.Label, CreatedAt: k.CreatedAt,
+		}
+		if k.RevokedAt.Valid {
+			kr.RevokedAt = k.RevokedAt.String
+		}
+		out = append(out, kr)
+	}
+	c.JSON(200, out)
+}
+
+func (s *Server) handleRevokeKey(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	err := s.store.RevokeKey(id)
+	if errors.Is(err, store.ErrNotFound) {
+		respondError(c, http.StatusNotFound, "not_found", "key not found or already revoked")
+		return
+	}
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
