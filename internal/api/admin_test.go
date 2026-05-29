@@ -116,3 +116,33 @@ func TestAdminKeyFlow(t *testing.T) {
 }
 
 func itoa(i int64) string { return strconv.FormatInt(i, 10) }
+
+// 改了 appid 时，旧 appid 与新 appid 的缓存实例都应被失效。
+func TestAdminUpdateAccountInvalidatesOldAppID(t *testing.T) {
+	s, r := adminServer(t)
+	acc, _ := s.store.CreateAccount("gz", "oldapp", "sec")
+
+	newApp := "newapp"
+	body, _ := json.Marshal(types.UpdateAccountRequest{AppID: &newApp})
+	req := httptest.NewRequest("PUT", "/admin/accounts/"+itoa(acc.ID), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	fw := s.wechat.(*fakeWechat)
+	var sawOld, sawNew bool
+	for _, a := range fw.invalidated {
+		if a == "oldapp" {
+			sawOld = true
+		}
+		if a == "newapp" {
+			sawNew = true
+		}
+	}
+	if !sawOld || !sawNew {
+		t.Fatalf("expected old+new appid invalidated, got %v", fw.invalidated)
+	}
+}

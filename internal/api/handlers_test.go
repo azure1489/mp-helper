@@ -22,6 +22,7 @@ type fakeWechat struct {
 	draftErr      error
 	gotType       string
 	gotArticles   []types.Article
+	invalidated   []string
 }
 
 func (f *fakeWechat) UploadMaterial(appID, appSecret, mediaType, filename string, r io.Reader) (string, string, error) {
@@ -33,7 +34,7 @@ func (f *fakeWechat) AddDraft(appID, appSecret string, articles []types.Article)
 	f.gotArticles = articles
 	return f.draftMediaID, f.draftErr
 }
-func (f *fakeWechat) Invalidate(appID string) {}
+func (f *fakeWechat) Invalidate(appID string) { f.invalidated = append(f.invalidated, appID) }
 
 // withAccount 注入一个已鉴权账号（绕过 DataAuth，专注 handler 逻辑）。
 func withAccount() gin.HandlerFunc {

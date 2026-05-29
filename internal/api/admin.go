@@ -77,16 +77,31 @@ func (s *Server) handleUpdateAccount(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "bad_request", "invalid json body")
 		return
 	}
-	err := s.store.UpdateAccount(id, req.Name, req.AppID, req.AppSecret)
+	// 先取旧 appid，更新后若 appid 变化需把旧 appid 的缓存实例也失效。
+	old, err := s.store.GetAccount(id)
 	if errors.Is(err, store.ErrNotFound) {
 		respondError(c, http.StatusNotFound, "not_found", "account not found")
 		return
 	}
 	if err != nil {
-		respondError(c, http.StatusBadRequest, "bad_request", err.Error())
+		respondError(c, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	a, _ := s.store.GetAccount(id)
+	if err := s.store.UpdateAccount(id, req.Name, req.AppID, req.AppSecret); errors.Is(err, store.ErrNotFound) {
+		respondError(c, http.StatusNotFound, "not_found", "account not found")
+		return
+	} else if err != nil {
+		respondError(c, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	a, err := s.store.GetAccount(id)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	if old.AppID != a.AppID {
+		s.wechat.Invalidate(old.AppID)
+	}
 	s.wechat.Invalidate(a.AppID)
 	c.JSON(200, types.AccountResponse{ID: a.ID, Name: a.Name, AppID: a.AppID})
 }
