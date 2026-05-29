@@ -1,0 +1,15 @@
+# 监听地址与端口
+listen: ":8080"
+
+# SQLite 文件路径
+db_path: "./mp-helper.db"
+
+# 管理接口 admin token（也可用环境变量 MP_HELPER_ADMIN_TOKEN 覆盖）
+admin_token: "change-me-admin-token"
+
+# access_token 缓存：v1 仅支持 memory
+cache:
+  type: "memory"
+
+# 请求微信的全局超时（秒）
+wechat_timeout_seconds: 30
