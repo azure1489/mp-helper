@@ -64,11 +64,13 @@ func (m *Manager) Invalidate(appID string) {
 	m.mu.Unlock()
 }
 
+// UploadMaterial 上传永久素材，返回 media_id 与（图片类型的）url。委托给 silenceper 的 material.AddMaterialFromReader。
 func (m *Manager) UploadMaterial(appID, appSecret, mediaType, filename string, r io.Reader) (string, string, error) {
 	mat := m.get(appID, appSecret).GetMaterial()
 	return mat.AddMaterialFromReader(material.MediaType(mediaType), filename, r)
 }
 
+// AddDraft 把 types.Article 列表转换为 silenceper 的 draft.Article 并创建草稿，返回草稿 media_id。
 func (m *Manager) AddDraft(appID, appSecret string, articles []types.Article) (string, error) {
 	d := m.get(appID, appSecret).GetDraft()
 	arts := make([]*draft.Article, 0, len(articles))
