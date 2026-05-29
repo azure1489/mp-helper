@@ -54,3 +54,18 @@ func TestValidateCacheType(t *testing.T) {
 		t.Fatal("expected error for unsupported cache type")
 	}
 }
+
+// 覆盖「无配置文件、纯环境变量」的部署路径。
+func TestLoadNoFile(t *testing.T) {
+	t.Setenv("MP_HELPER_ADMIN_TOKEN", "tok")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AdminToken != "tok" {
+		t.Fatalf("admin token = %q", cfg.AdminToken)
+	}
+	if cfg.Listen != ":8080" || cfg.DBPath != "./mp-helper.db" {
+		t.Fatalf("defaults not applied: %+v", cfg)
+	}
+}

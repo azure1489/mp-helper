@@ -9,7 +9,7 @@ type HealthResponse struct {
 // MaterialResponse 是上传素材的返回。
 type MaterialResponse struct {
 	MediaID string `json:"media_id"`
-	URL     string `json:"url"`
+	URL     string `json:"url,omitempty"`
 }
 
 // Article 对应微信图文草稿的一篇文章。
@@ -55,9 +55,9 @@ type CreateAccountRequest struct {
 }
 
 type UpdateAccountRequest struct {
-	Name      *string `json:"name"`
-	AppID     *string `json:"appid"`
-	AppSecret *string `json:"app_secret"`
+	Name      *string `json:"name,omitempty"`
+	AppID     *string `json:"appid,omitempty"`
+	AppSecret *string `json:"app_secret,omitempty"`
 }
 
 type AccountResponse struct {
