@@ -65,7 +65,7 @@ AI agent
 
 ```
 mp-helper/
-├── go.mod / go.sum                  # module github.com/iazure/mp-helper
+├── go.mod / go.sum                  # module github.com/azure1489/mp-helper
 ├── Makefile                         # build/test/lint
 ├── README.md                        # 面向人类：部署 Web 服务
 ├── INSTALL.md                       # 面向 agent：安装 skill（机器可执行步骤）
