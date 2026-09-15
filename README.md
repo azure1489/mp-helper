@@ -60,8 +60,13 @@ curl -s -X DELETE "$BASE/admin/keys/1" -H "$ADMIN"
 | GET | `/healthz` | 健康检查 |
 | POST | `/api/v1/materials` | multipart 上传图片，返回 `{media_id,url}` |
 | POST | `/api/v1/drafts` | JSON 文章列表，返回 `{media_id}` |
+| GET | `/api/v1/drafts?offset=&count=&no_content=` | 草稿列表（只读，微信原始返回；count 1–20，no_content 缺省 1） |
+| GET | `/api/v1/drafts/:media_id` | 读取一篇草稿（保存后回读核对） |
+| GET | `/api/v1/published?offset=&count=&no_content=` | 已发布图文列表（只读；「群发」的图文不在其中） |
+| GET | `/api/v1/published/:article_id` | 读取一篇已发布图文（含正文） |
+| GET | `/api/v1/datacube/:api?begin=YYYY-MM-DD&end=YYYY-MM-DD` | 数据统计透传，只放行 `getarticletotaldetail`（单篇逐日明细，含群发）、`getbizsummary`、`getusersummary`、`getusercumulate` |
 
-数据面需请求头 `Authorization: Bearer <api_key>`，key 唯一对应一个公众号。
+数据面需请求头 `Authorization: Bearer <api_key>`，key 唯一对应一个公众号。只读接口原样透传微信返回，微信报错时返回 502 并带 `wechat_errcode`（如 48001 未授权、47009 接口已下线）。
 
 ## 安全与已知限制
 

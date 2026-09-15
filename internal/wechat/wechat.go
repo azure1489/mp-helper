@@ -2,6 +2,8 @@
 package wechat
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"sync"
 
@@ -10,6 +12,7 @@ import (
 	offConfig "github.com/silenceper/wechat/v2/officialaccount/config"
 	"github.com/silenceper/wechat/v2/officialaccount/draft"
 	"github.com/silenceper/wechat/v2/officialaccount/material"
+	"github.com/silenceper/wechat/v2/util"
 
 	"github.com/azure1489/mp-helper/internal/types"
 )
@@ -19,6 +22,13 @@ type Service interface {
 	UploadMaterial(appID, appSecret, mediaType, filename string, r io.Reader) (mediaID, url string, err error)
 	AddDraft(appID, appSecret string, articles []types.Article) (mediaID string, err error)
 	Invalidate(appID string)
+
+	// 只读查询：返回微信原始响应体（原样透传，不改字段名）。
+	ListPublished(appID, appSecret string, offset, count int, noContent bool) (json.RawMessage, error)
+	GetPublished(appID, appSecret, articleID string) (json.RawMessage, error)
+	ListDrafts(appID, appSecret string, offset, count int, noContent bool) (json.RawMessage, error)
+	GetDraft(appID, appSecret, mediaID string) (json.RawMessage, error)
+	DataCube(appID, appSecret, api, begin, end string) (json.RawMessage, error)
 }
 
 // Manager 按 appid 缓存 OfficialAccount 实例，共享一个 token cache。
@@ -88,6 +98,74 @@ func (m *Manager) AddDraft(appID, appSecret string, articles []types.Article) (s
 		})
 	}
 	return d.AddDraft(arts)
+}
+
+// ---- 只读查询（已发布列表与单篇、草稿读取、数据统计）----
+// 不做发布、群发、删除；统计接口的白名单在 api 层。
+
+const apiBase = "https://api.weixin.qq.com"
+
+// postRaw 以该账号的 access_token 调用微信接口：errcode 非 0 时返回错误（文本含 errcode=N，供 respondWechatError 解析），
+// 否则原样返回响应体。
+func (m *Manager) postRaw(appID, appSecret, apiName, path string, body interface{}) (json.RawMessage, error) {
+	token, err := m.get(appID, appSecret).GetContext().GetAccessToken()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := util.PostJSON(apiBase+path+"?access_token="+token, body)
+	if err != nil {
+		return nil, err
+	}
+	var ce struct {
+		ErrCode int64  `json:"errcode"`
+		ErrMsg  string `json:"errmsg"`
+	}
+	if err := json.Unmarshal(resp, &ce); err != nil {
+		return nil, fmt.Errorf("%s: response is not JSON: %w", apiName, err)
+	}
+	if ce.ErrCode != 0 {
+		return nil, fmt.Errorf("%s Error , errcode=%d , errmsg=%s", apiName, ce.ErrCode, ce.ErrMsg)
+	}
+	return json.RawMessage(resp), nil
+}
+
+type pageRequest struct {
+	Offset    int `json:"offset"`
+	Count     int `json:"count"`
+	NoContent int `json:"no_content"`
+}
+
+func newPageRequest(offset, count int, noContent bool) pageRequest {
+	p := pageRequest{Offset: offset, Count: count}
+	if noContent {
+		p.NoContent = 1
+	}
+	return p
+}
+
+// ListPublished 分页列出已发布图文（freepublish/batchget）。「群发」的图文不在其中。
+func (m *Manager) ListPublished(appID, appSecret string, offset, count int, noContent bool) (json.RawMessage, error) {
+	return m.postRaw(appID, appSecret, "ListPublished", "/cgi-bin/freepublish/batchget", newPageRequest(offset, count, noContent))
+}
+
+// GetPublished 读取一篇已发布图文（freepublish/getarticle）。
+func (m *Manager) GetPublished(appID, appSecret, articleID string) (json.RawMessage, error) {
+	return m.postRaw(appID, appSecret, "GetPublished", "/cgi-bin/freepublish/getarticle", map[string]string{"article_id": articleID})
+}
+
+// ListDrafts 分页列出草稿（draft/batchget）。
+func (m *Manager) ListDrafts(appID, appSecret string, offset, count int, noContent bool) (json.RawMessage, error) {
+	return m.postRaw(appID, appSecret, "ListDrafts", "/cgi-bin/draft/batchget", newPageRequest(offset, count, noContent))
+}
+
+// GetDraft 读取一篇草稿（draft/get），供保存后回读核对。
+func (m *Manager) GetDraft(appID, appSecret, mediaID string) (json.RawMessage, error) {
+	return m.postRaw(appID, appSecret, "GetDraft", "/cgi-bin/draft/get", map[string]string{"media_id": mediaID})
+}
+
+// DataCube 调用数据统计接口（/datacube/<api>），日期为 YYYY-MM-DD。
+func (m *Manager) DataCube(appID, appSecret, api, begin, end string) (json.RawMessage, error) {
+	return m.postRaw(appID, appSecret, "DataCube."+api, "/datacube/"+api, map[string]string{"begin_date": begin, "end_date": end})
 }
 
 // 编译期断言 Manager 实现 Service。

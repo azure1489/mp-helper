@@ -35,6 +35,11 @@ func (s *Server) Router() *gin.Engine {
 	data := r.Group("/api/v1", DataAuth(s.store))
 	data.POST("/materials", s.handleUploadMaterial)
 	data.POST("/drafts", s.handleCreateDraft)
+	data.GET("/drafts", s.handleListDrafts)
+	data.GET("/drafts/:media_id", s.handleGetDraft)
+	data.GET("/published", s.handleListPublished)
+	data.GET("/published/:article_id", s.handleGetPublished)
+	data.GET("/datacube/:api", s.handleDataCube)
 
 	admin := r.Group("/admin", AdminAuth(s.cfg.AdminToken))
 	admin.POST("/accounts", s.handleCreateAccount)

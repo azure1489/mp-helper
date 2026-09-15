@@ -10,7 +10,7 @@ description: >-
   草稿箱）；③ 健康检查。一把 API Key 对应一个公众号。不要用于：直接群发/正式发布给粉丝
   （本 skill 只到草稿箱）、视频/语音素材、公众号菜单/自动回复/客服/模板消息/IP白名单等
   配置、微信个人号或好友群发、其它平台（微博/小红书）、微信小程序/企业微信/微信支付。
-version: 1.0.0
+version: 1.1.0
 required_environment_variables:
   - name: MP_HELPER_API_URL
     prompt: mp-helper 服务地址（mp-server 的 https 地址）
@@ -34,6 +34,9 @@ appid/secret 与 access_token）。
 |---|---|---|---|
 | 上传图片素材 | `mp-cli material upload <file>` | 本地图片 | `media_id`（可作封面）+ `url`（可嵌正文 `<img>`） |
 | 创建图文草稿 | `mp-cli draft create ...` | 标题 + 正文 HTML + 封面 | 草稿 `media_id`（进入草稿箱） |
+| 列出 / 读取草稿 | `mp-cli draft list`、`mp-cli draft get <media_id>` | 无 / 草稿 `media_id` | 草稿箱原始返回：保存后回读核对标题、正文、封面是否与提交一致 |
+| 查询已发布图文 | `mp-cli published list`、`mp-cli published get <article_id>` | 无 / `article_id` | 已发布列表与单篇（含正文）；「群发」的图文不在列表里 |
+| 数据统计 | `mp-cli stats <api> --begin --end` | 接口名 + 日期 | 微信原始统计：单篇逐日明细（含群发）、每日阅读汇总、用户增减、累计用户 |
 | 健康检查 | `mp-cli health` | 无 | `{"status":"ok"}` |
 
 - **永久图片素材**：上传后既得 `media_id`（用作草稿封面 `thumb_media_id`），又得 `url`（用于正文里引用图片）。
@@ -103,7 +106,12 @@ appid/secret 与 access_token）。
    # => {"media_id":"草稿 media_id"}
    ```
    `--cover` 传本地图片路径时会自动先上传再用其 media_id。
-5. 把返回的草稿 `media_id` 反馈给用户（可在公众号后台「草稿箱」看到，作者审阅后手动群发）。
+5. 回读核对：
+   ```bash
+   mp-cli draft get <草稿 media_id>
+   ```
+   对照提交的标题、正文、封面，确认没有丢图、错序或样式变化。
+6. 把返回的草稿 `media_id` 与回读结果反馈给用户（可在公众号后台「草稿箱」看到，作者审阅后手动群发）。
 
 ## 命令与参数速查
 
@@ -116,7 +124,14 @@ mp-cli draft create
     --cover <media_id|图片路径> (必填，传图片则自动先上传)
     [--author <作者>] [--digest <摘要>] [--source-url <原文链接>]
     [--show-cover-pic] [--need-open-comment] [--only-fans-can-comment]
+mp-cli draft list [--offset 0] [--count 20] [--with-content]
+mp-cli draft get <media_id>
+mp-cli published list [--offset 0] [--count 20] [--with-content]
+mp-cli published get <article_id>
+mp-cli stats <getarticletotaldetail|getbizsummary|getusersummary|getusercumulate> --begin YYYY-MM-DD --end YYYY-MM-DD
 ```
+
+只读命令原样输出微信返回，不改字段名；本 skill 仍不做发布、群发、删除。
 
 ## 输出与错误
 
@@ -125,4 +140,6 @@ mp-cli draft create
 - `502 wechat_error`：微信返回的错误，`message` 含微信 errmsg、`wechat_errcode` 为微信错误码。常见：
   - `40164`：服务器公网 IP 不在该公众号「IP 白名单」中 → 让用户到公众号后台「设置与开发 → 基本配置 → IP白名单」添加报错信息里的 IP。
   - `40001/42001`：access_token 失效/过期（一般服务端会自动重取，重试即可）。
+  - `48001`：该公众号没有这个接口的权限（如未认证），属平台所限，不要反复重试。
+  - `47009`：微信已下线该接口（旧版图文统计），改用 `stats getarticletotaldetail`。
 - 图片建议为 png/jpg/jpeg，单张 ≤ 10MB。

@@ -23,6 +23,9 @@ type fakeWechat struct {
 	gotType       string
 	gotArticles   []types.Article
 	invalidated   []string
+	readRaw       json.RawMessage
+	readErr       error
+	gotRead       []string
 }
 
 func (f *fakeWechat) UploadMaterial(appID, appSecret, mediaType, filename string, r io.Reader) (string, string, error) {

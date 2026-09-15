@@ -35,6 +35,14 @@ func TestRouterWiring(t *testing.T) {
 		t.Fatalf("drafts without key status = %d want 401", w.Code)
 	}
 
+	// 只读查询同样需要 key → 401
+	req = httptest.NewRequest("GET", "/api/v1/published", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 401 {
+		t.Fatalf("published without key status = %d want 401", w.Code)
+	}
+
 	// 管理面无 token → 401
 	req = httptest.NewRequest("GET", "/admin/accounts", nil)
 	w = httptest.NewRecorder()
