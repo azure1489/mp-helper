@@ -40,6 +40,8 @@ func (s *Server) Router() *gin.Engine {
 	data.GET("/published", s.handleListPublished)
 	data.GET("/published/:article_id", s.handleGetPublished)
 	data.GET("/datacube/:api", s.handleDataCube)
+	data.POST("/body-images", s.handleUploadBodyImage)
+	data.PUT("/drafts", s.handleUpdateDraft)
 
 	admin := r.Group("/admin", AdminAuth(s.cfg.AdminToken))
 	admin.POST("/accounts", s.handleCreateAccount)

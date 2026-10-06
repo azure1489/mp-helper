@@ -31,10 +31,8 @@ func main() {
 	}
 	defer st.Close()
 
-	// silenceper 的 util 用包级 DefaultHTTPClient，启动时设置全局超时（仅此一次，serve 前完成，无并发问题）。
-	if cfg.WechatTimeoutSeconds > 0 {
-		util.DefaultHTTPClient.Timeout = time.Duration(cfg.WechatTimeoutSeconds) * time.Second
-	}
+	// Configure once before serving; never mutate shared http.DefaultClient.
+	util.DefaultHTTPClient = wechat.NewWriteHTTPClient(time.Duration(cfg.WechatTimeoutSeconds) * time.Second)
 
 	mgr := wechat.NewManager(cache.NewMemory())
 	srv := api.NewServer(cfg, st, mgr)

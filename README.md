@@ -60,6 +60,8 @@ curl -s -X DELETE "$BASE/admin/keys/1" -H "$ADMIN"
 | GET | `/healthz` | 健康检查 |
 | POST | `/api/v1/materials` | multipart 上传图片，返回 `{media_id,url}` |
 | POST | `/api/v1/drafts` | JSON 文章列表，返回 `{media_id}` |
+| PUT | `/api/v1/drafts` | 更新已有草稿：`{media_id, index, articles}`，`articles` 为单篇完整文章对象（九个字段必须写全）；只写一次，不改为新建、不自动重试 |
+| POST | `/api/v1/body-images` | multipart `file`，jpg/png 小于 1 MB，原字节转发微信 `media/uploadimg`，返回 `{url}`（正文图片，不进永久素材库） |
 | GET | `/api/v1/drafts?offset=&count=&no_content=` | 草稿列表（只读，微信原始返回；count 1–20，no_content 缺省 1） |
 | GET | `/api/v1/drafts/:media_id` | 读取一篇草稿（保存后回读核对） |
 | GET | `/api/v1/published?offset=&count=&no_content=` | 已发布图文列表（只读；「群发」的图文不在其中） |

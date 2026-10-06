@@ -10,7 +10,7 @@ description: >-
   草稿箱）；③ 回读草稿箱、查询已发布图文与数据统计（只读）；④ 健康检查。一把 API Key 对应一个公众号。不要用于：直接群发/正式发布给粉丝
   （本 skill 只到草稿箱）、视频/语音素材、公众号菜单/自动回复/客服/模板消息/IP白名单等
   配置、微信个人号或好友群发、其它平台（微博/小红书）、微信小程序/企业微信/微信支付。
-version: 1.1.0
+version: 1.2.0
 required_environment_variables:
   - name: MP_HELPER_API_URL
     prompt: mp-helper 服务地址（mp-server 的 https 地址）
@@ -34,6 +34,8 @@ appid/secret 与 access_token）。
 |---|---|---|---|
 | 上传图片素材 | `mp-cli material upload <file>` | 本地图片 | `media_id`（可作封面）+ `url`（可嵌正文 `<img>`） |
 | 创建图文草稿 | `mp-cli draft create ...` | 标题 + 正文 HTML + 封面 | 草稿 `media_id`（进入草稿箱） |
+| 上传正文图片（原字节） | `mp-cli body-image upload <file>` | jpg/png，小于 1 MB | 正文图片 `url`（只能嵌正文 `<img>`，不能作封面；不占永久素材库） |
+| 更新已有草稿 | `mp-cli draft update --media-id <id> --index 0 --article-file a.json` | 草稿 ID + 篇序 + 完整文章 JSON | 同一草稿 `media_id`（原地覆盖该篇，不新建） |
 | 列出 / 读取草稿 | `mp-cli draft list`、`mp-cli draft get <media_id>` | 无 / 草稿 `media_id` | 草稿箱原始返回：保存后回读核对标题、正文、封面是否与提交一致 |
 | 查询已发布图文 | `mp-cli published list`、`mp-cli published get <article_id>` | 无 / `article_id` | 已发布列表与单篇（含正文）；「群发」的图文不在列表里 |
 | 数据统计 | `mp-cli stats <api> --begin --end` | 接口名 + 日期 | 微信原始统计：单篇逐日明细（含群发）、每日阅读汇总、用户增减、累计用户 |
@@ -41,6 +43,8 @@ appid/secret 与 access_token）。
 
 - **永久图片素材**：上传后既得 `media_id`（用作草稿封面 `thumb_media_id`），又得 `url`（用于正文里引用图片）。
 - **多公众号**：一把 `MP_HELPER_API_KEY` 唯一对应一个公众号；换公众号就换 key。
+- **正文图片 vs 永久素材**：`body-image upload` 走微信「上传图文消息内的图片」接口，服务端原样转发文件字节，不缩放不重编码；只接受 jpg/png 且小于 1 MB，超了直接拒绝，不会替你压缩。封面仍用 `material upload` 得到的 `media_id`。
+- **更新草稿**：`draft update` 只覆盖指定草稿 ID 的指定篇（`--index` 必须显式给，0 为首篇），文章 JSON 必须写全 `title author digest content content_source_url thumb_media_id show_cover_pic need_open_comment only_fans_can_comment` 九个字段（空值也要写出来），失败不会改为新建、也不自动重试；超时或 5xx 表示结果不确定，先 `draft get` 回读再决定。
 
 ## 能帮用户实现什么
 
@@ -126,6 +130,8 @@ mp-cli draft create
     [--show-cover-pic] [--need-open-comment] [--only-fans-can-comment]
 mp-cli draft list [--offset 0] [--count 20] [--with-content]
 mp-cli draft get <media_id>
+mp-cli draft update --media-id <草稿 media_id> --index <篇序，0 起> --article-file <article.json>
+mp-cli body-image upload <file>   (jpg/png，小于 1 MB，返回正文图片 url)
 mp-cli published list [--offset 0] [--count 20] [--with-content]
 mp-cli published get <article_id>
 mp-cli stats <getarticletotaldetail|getbizsummary|getusersummary|getusercumulate> --begin YYYY-MM-DD --end YYYY-MM-DD

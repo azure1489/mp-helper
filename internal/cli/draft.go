@@ -83,6 +83,6 @@ func newDraftCmd() *cobra.Command {
 	f.BoolVar(&needComment, "need-open-comment", false, "开启评论")
 	f.BoolVar(&fansComment, "only-fans-can-comment", false, "仅粉丝可评论")
 
-	d.AddCommand(create, newDraftListCmd(), newDraftGetCmd())
+	d.AddCommand(create, newDraftListCmd(), newDraftGetCmd(), newDraftUpdateCmd())
 	return d
 }

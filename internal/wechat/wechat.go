@@ -19,6 +19,8 @@ import (
 
 // Service 是 handler 依赖的微信能力抽象，便于测试 mock。
 type Service interface {
+	UploadBodyImage(appID, appSecret, filename string, r io.Reader) (string, error)
+	UpdateDraft(appID, appSecret, mediaID string, index int, article types.Article) error
 	UploadMaterial(appID, appSecret, mediaType, filename string, r io.Reader) (mediaID, url string, err error)
 	AddDraft(appID, appSecret string, articles []types.Article) (mediaID string, err error)
 	Invalidate(appID string)

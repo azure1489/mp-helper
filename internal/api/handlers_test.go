@@ -8,13 +8,21 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"github.com/azure1489/mp-helper/internal/store"
 	"github.com/azure1489/mp-helper/internal/types"
+	"github.com/gin-gonic/gin"
 )
 
 // fakeWechat 实现 wechat.Service，用于 handler 测试。
 type fakeWechat struct {
+	bodyCalls     int
+	updateCalls   int
+	gotAppID      string
+	gotSecret     string
+	gotBytes      []byte
+	gotMediaID    string
+	gotIndex      int
+	gotArticle    types.Article
 	uploadMediaID string
 	uploadURL     string
 	uploadErr     error
