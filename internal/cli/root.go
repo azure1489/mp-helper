@@ -31,11 +31,11 @@ func printJSON(cmd *cobra.Command, v interface{}) error {
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "mp-cli",
-		Short:         "mp-helper CLI：上传微信公众号素材、创建与读取草稿、查询已发布图文与数据统计",
+		Short:         "mp-helper CLI：上传微信公众号素材、创建与读取草稿、查询已发布图文、数据统计与分析",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(newHealthCmd(), newMaterialCmd(), newBodyImageCmd(), newDraftCmd(), newPublishedCmd(), newStatsCmd())
+	root.AddCommand(newHealthCmd(), newMaterialCmd(), newBodyImageCmd(), newDraftCmd(), newPublishedCmd(), newStatsCmd(), newAnalyticsCmd(), newArticleCmd())
 	return root
 }
 

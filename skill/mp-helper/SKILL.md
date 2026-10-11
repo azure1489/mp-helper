@@ -7,10 +7,10 @@ description: >-
   「上传公众号封面或正文配图、要 media_id 或可在正文引用的图片 URL」，就用本 skill——
   哪怕没明说「草稿」「素材」或工具名。能力：① 上传永久图片素材（得 media_id 作封面 +
   url 供正文 <img> 引用）；② 用 标题+正文HTML+封面 创建图文草稿（得草稿 media_id，进
-  草稿箱）；③ 回读草稿箱、查询已发布图文与数据统计（只读）；④ 健康检查。一把 API Key 对应一个公众号。不要用于：直接群发/正式发布给粉丝
+  草稿箱）；③ 回读草稿箱、查询已发布图文与数据统计（只读）；④ 公众号数据分析：单篇文章表现（阅读、来源、分享、收藏、7 天数据、推送打开率、送达人数）、每日涨粉掉粉与发文节奏、推送时段对比；⑤ 健康检查。一把 API Key 对应一个公众号。不要用于：直接群发/正式发布给粉丝
   （本 skill 只到草稿箱）、视频/语音素材、公众号菜单/自动回复/客服/模板消息/IP白名单等
   配置、微信个人号或好友群发、其它平台（微博/小红书）、微信小程序/企业微信/微信支付。
-version: 1.2.0
+version: 1.3.0
 required_environment_variables:
   - name: MP_HELPER_API_URL
     prompt: mp-helper 服务地址（mp-server 的 https 地址）
@@ -38,7 +38,10 @@ appid/secret 与 access_token）。
 | 更新已有草稿 | `mp-cli draft update --media-id <id> --index 0 --article-file a.json` | 草稿 ID + 篇序 + 完整文章 JSON | 同一草稿 `media_id`（原地覆盖该篇，不新建） |
 | 列出 / 读取草稿 | `mp-cli draft list`、`mp-cli draft get <media_id>` | 无 / 草稿 `media_id` | 草稿箱原始返回：保存后回读核对标题、正文、封面是否与提交一致 |
 | 查询已发布图文 | `mp-cli published list`、`mp-cli published get <article_id>` | 无 / `article_id` | 已发布列表与单篇（含正文）；「群发」的图文不在列表里 |
-| 数据统计 | `mp-cli stats <api> --begin --end` | 接口名 + 日期 | 微信原始统计：单篇逐日明细（含群发）、每日阅读汇总、用户增减、累计用户 |
+| 数据统计 | `mp-cli stats <api> --begin --end` | 接口名 + 日期 | 微信原始统计：单篇逐日明细（含群发）、单篇每日阅读 / 分享、每日阅读汇总、用户增减、累计用户 |
+| 文章表现分析 | `mp-cli analytics articles --begin --end [--format csv]` | 发表日期区间 | 每篇一行：当天 / 7 天 / 最新的阅读、来源、分享、收藏，推送打开率、推算送达人数、推送时刻 |
+| 涨粉掉粉分析 | `mp-cli analytics daily --begin --end [--format csv]` | 日期区间 | 每天一行：新增、取关、累计、取关率、阅读与来源、推送篇数、日类型；附推送日 / 次日 / 不发日平均 |
+| 补录推送时刻 / 分类 | `mp-cli article meta set <msgid> --published-at "YYYY-MM-DD HH:MM"` | msgid + 时刻 / 分类 / 备注 | 补录结果（只存本服务，不改公众号） |
 | 健康检查 | `mp-cli health` | 无 | `{"status":"ok"}` |
 
 - **永久图片素材**：上传后既得 `media_id`（用作草稿封面 `thumb_media_id`），又得 `url`（用于正文里引用图片）。
@@ -59,6 +62,8 @@ appid/secret 与 access_token）。
 - “发到 / 推送到微信公众号”“放进公众号草稿箱”“公众号发文 / 排版图文”
 - “上传公众号图片 / 封面素材”“要一个能在公众号正文里用的图片 URL”
 - 把一篇（已有或刚生成的）文章准备成公众号图文、生成草稿待发
+
+- 「哪篇 / 哪类文章更受欢迎」「几点发更好」「涨粉掉粉跟发文有没有关系」「隔天发和每天发哪个掉粉少」这类公众号数据分析
 
 ## 何时不要用（超出范围）
 
@@ -117,6 +122,48 @@ appid/secret 与 access_token）。
    对照提交的标题、正文、封面，确认没有丢图、错序或样式变化。
 6. 把返回的草稿 `media_id` 与回读结果反馈给用户（可在公众号后台「草稿箱」看到，作者审阅后手动群发）。
 
+## 数据分析工作流
+
+用于回答「哪篇文章表现好」「几点推送打开率高」「发文节奏和掉粉的关系」。数据由服务端整理好，直接用，不要自己去拼 `stats` 原始返回。
+
+1. 拉单篇表现（按**发表日期**选区间，每次最多 31 天，最晚到昨天；更长的时间段分几次拉）：
+   ```bash
+   mp-cli analytics articles --begin 2026-09-11 --end 2026-10-11
+   ```
+2. 补推送时刻：`notified` 为 true 但 `publish_time` 为 null 的文章，把标题和发表日期列给用户，问当时几点推送的，再逐篇补录：
+   ```bash
+   mp-cli article meta set 2247549594_1 --published-at "2026-10-05 21:00"
+   ```
+   用户记不清就跳过，分析时说明这些文章没有计入时段对比。分类也可以顺手补：`--category 攻略`。
+3. 拉每日数据（同样最多 31 天一次）：
+   ```bash
+   mp-cli analytics daily --begin 2026-09-11 --end 2026-10-11
+   ```
+4. 分析。数据多时用 `--format csv` 导出成表格再算。
+
+### 字段口径
+
+| 字段 | 含义 |
+|---|---|
+| `day0` / `day7` / `latest` | 截至发表当天 / 发表日 + 6 天 / 最近一天的**累计**数据；文章未满 7 天时 `day7` 为 null |
+| `push_read_user` | 来源为「公众号消息」（即推送）的阅读人数 |
+| `read_by_source` | 阅读来源：公众号消息、聊天会话、朋友圈、公众号主页（≈ 历史消息）、推荐、搜一搜、其他 |
+| `push_open_rate` | 推送打开率 = 公众号消息阅读人数 ÷ 送达人数（即微信的 `read_delivery_rate`） |
+| `delivered_est` | 送达人数**推算值** = 公众号消息阅读人数 ÷ 推送打开率；微信不直接提供 |
+| `notified` | true 为推送给粉丝（已通知）；false 为未开启通知，没有打开率和送达人数，不计入推送对比 |
+| `publish_time_source` | `manual` 人工补录；`freepublish` 取自发布记录（只在落在发表当天时才采用）；null 未知 |
+| `day_type` | `pushed` 当天有推送；`day_after_push` 推送次日；`quiet` 不发日 |
+| `cancel_rate` | 当天取关 ÷ 前一天累计关注 |
+| `new_by_source` | 新增关注按微信 `user_source` 编码拆分 |
+| `summary` | 按 `day_type` 的平均新增、取关、取关率 |
+
+### 必须告诉用户的限制
+
+- **没有按小时的数据**：微信已下线分时接口，看不了粉丝一天里几点在读。「几点发好」只能拿补录的推送时刻对比各篇的 `push_open_rate`，样本少时结论只能参考。
+- 取关无法归到具体某篇文章，`daily` 只能看相关性；隔天发和每天发要各积累几周数据才有比较意义。
+- 统计数据从 2025-11-01 开始；每篇只统计发表后 30 天；次日 8 点后再查前一天，`is_delay` 为 true 表示数据还没出全。
+- 返回里的 `warnings` 是个别日期取数失败或还没出数，其余数据照常可用，要在结论里提到。
+
 ## 命令与参数速查
 
 ```
@@ -134,7 +181,12 @@ mp-cli draft update --media-id <草稿 media_id> --index <篇序，0 起> --arti
 mp-cli body-image upload <file>   (jpg/png，小于 1 MB，返回正文图片 url)
 mp-cli published list [--offset 0] [--count 20] [--with-content]
 mp-cli published get <article_id>
-mp-cli stats <getarticletotaldetail|getbizsummary|getusersummary|getusercumulate> --begin YYYY-MM-DD --end YYYY-MM-DD
+mp-cli stats <getarticletotaldetail|getarticleread|getarticleshare|getbizsummary|getusersummary|getusercumulate> --begin YYYY-MM-DD --end YYYY-MM-DD
+mp-cli analytics articles --begin YYYY-MM-DD --end YYYY-MM-DD [--series] [--format json|csv]
+mp-cli analytics daily    --begin YYYY-MM-DD --end YYYY-MM-DD [--format json|csv]
+    (begin ≥ 2025-11-01，end ≤ 昨天，跨度 ≤ 31 天；csv 模式的告警写到 stderr)
+mp-cli article meta set <msgid> [--published-at "YYYY-MM-DD HH:MM"] [--category <分类>] [--note <备注>]
+mp-cli article meta list
 ```
 
 只读命令原样输出微信返回，不改字段名；本 skill 仍不做发布、群发、删除。
@@ -147,5 +199,6 @@ mp-cli stats <getarticletotaldetail|getbizsummary|getusersummary|getusercumulate
   - `40164`：服务器公网 IP 不在该公众号「IP 白名单」中 → 让用户到公众号后台「设置与开发 → 基本配置 → IP白名单」添加报错信息里的 IP。
   - `40001/42001`：access_token 失效/过期（一般服务端会自动重取，重试即可）。
   - `48001`：该公众号没有这个接口的权限（如未认证），属平台所限，不要反复重试。
-  - `47009`：微信已下线该接口（旧版图文统计），改用 `stats getarticletotaldetail`。
+  - `47009`：微信已下线该接口（旧版图文统计、分时数据），改用 `analytics` 或 `stats getarticletotaldetail`。
+  - `45009`：当天接口调用次数用完，明天再试；同一区间重复查询会命中服务端缓存，不额外消耗。
 - 图片建议为 png/jpg/jpeg，单张 ≤ 10MB。

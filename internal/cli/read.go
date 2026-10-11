@@ -102,7 +102,7 @@ func newStatsCmd() *cobra.Command {
 	var begin, end string
 	st := &cobra.Command{
 		Use:   "stats <api>",
-		Short: "数据统计：getarticletotaldetail | getbizsummary | getusersummary | getusercumulate",
+		Short: "数据统计原样透传：getarticletotaldetail | getarticleread | getarticleshare | getbizsummary | getusersummary | getusercumulate",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newClient()

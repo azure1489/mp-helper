@@ -66,9 +66,13 @@ curl -s -X DELETE "$BASE/admin/keys/1" -H "$ADMIN"
 | GET | `/api/v1/drafts/:media_id` | 读取一篇草稿（保存后回读核对） |
 | GET | `/api/v1/published?offset=&count=&no_content=` | 已发布图文列表（只读；「群发」的图文不在其中） |
 | GET | `/api/v1/published/:article_id` | 读取一篇已发布图文（含正文） |
-| GET | `/api/v1/datacube/:api?begin=YYYY-MM-DD&end=YYYY-MM-DD` | 数据统计透传，只放行 `getarticletotaldetail`（单篇逐日明细，含群发）、`getbizsummary`、`getusersummary`、`getusercumulate` |
+| GET | `/api/v1/datacube/:api?begin=YYYY-MM-DD&end=YYYY-MM-DD` | 数据统计透传，只放行 `getarticletotaldetail`（单篇逐日明细，含群发）、`getarticleread`、`getarticleshare`、`getbizsummary`、`getusersummary`、`getusercumulate` |
+| GET | `/api/v1/analytics/articles?begin=&end=&series=` | 按发表日期汇总单篇表现：当天 / 7 天 / 最新的阅读、来源、分享、收藏，推送打开率、推算送达人数、推送时刻（人工补录优先，其次取当天的发布记录） |
+| GET | `/api/v1/analytics/daily?begin=&end=` | 每日新增 / 取关 / 累计、取关率、阅读汇总、推送篇数与日类型（推送日 / 次日 / 不发日），附分类型平均 |
+| PUT | `/api/v1/articles/:msgid/meta` | 补录文章推送时刻（`published_at`，北京时间 `YYYY-MM-DD HH:MM`）、分类、备注；省略的字段保留原值 |
+| GET | `/api/v1/articles/meta` | 列出补录信息 |
 
-数据面需请求头 `Authorization: Bearer <api_key>`，key 唯一对应一个公众号。只读接口原样透传微信返回，微信报错时返回 502 并带 `wechat_errcode`（如 48001 未授权、47009 接口已下线）。
+数据面需请求头 `Authorization: Bearer <api_key>`，key 唯一对应一个公众号。`analytics` 两个接口的日期须满足 begin ≥ 2025-11-01、end ≤ 昨天（北京时间）、跨度 ≤ 31 天；个别日期取数失败记入 `warnings`，全部失败才返回 502。单篇明细（`getarticletotaldetail`）按天缓存在 SQLite：已过 30 天统计期的永久缓存，其余缓存 1 小时。除 `analytics` 外，只读接口原样透传微信返回，微信报错时返回 502 并带 `wechat_errcode`（如 48001 未授权、47009 接口已下线）。
 
 ## 安全与已知限制
 

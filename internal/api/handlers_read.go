@@ -17,6 +17,8 @@ var dataCubeAPIs = map[string]bool{
 	"getbizsummary":         true, // 账号每日阅读汇总
 	"getusersummary":        true, // 用户增减
 	"getusercumulate":       true, // 累计用户
+	"getarticleread":        true, // 单篇图文每日阅读（按来源拆分）
+	"getarticleshare":       true, // 单篇图文每日分享
 }
 
 var dateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
