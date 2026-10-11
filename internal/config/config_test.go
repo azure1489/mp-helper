@@ -69,3 +69,21 @@ func TestLoadNoFile(t *testing.T) {
 		t.Fatalf("defaults not applied: %+v", cfg)
 	}
 }
+
+func TestArchiveConfig(t *testing.T) {
+	// 未写 archive 段时用默认值（开启、09:30、200 次）。
+	cfg, err := Load(writeTmp(t, "admin_token: \"x\"\n"))
+	if err != nil || !cfg.Archive.Enabled || cfg.Archive.Time != "09:30" || cfg.Archive.MaxCalls != 200 {
+		t.Fatalf("defaults: %+v %v", cfg.Archive, err)
+	}
+	// 只关闭时保留其余默认值。
+	cfg, err = Load(writeTmp(t, "admin_token: \"x\"\narchive:\n  enabled: false\n"))
+	if err != nil || cfg.Archive.Enabled || cfg.Archive.Time != "09:30" {
+		t.Fatalf("disable: %+v %v", cfg.Archive, err)
+	}
+	for _, body := range []string{"archive:\n  time: \"25:00\"\n", "archive:\n  max_calls: 0\n"} {
+		if _, err := Load(writeTmp(t, "admin_token: \"x\"\n"+body)); err == nil {
+			t.Fatalf("want error for %q", body)
+		}
+	}
+}

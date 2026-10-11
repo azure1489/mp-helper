@@ -34,7 +34,7 @@ func TestAnalyticsCmds(t *testing.T) {
 				"latest":{"stat_date":"2026-10-07","read_user":500,"push_read_user":40,"read_by_source":{"推荐":400}}}],
 				"warnings":[{"date":"2026-10-02","api":"getarticletotaldetail","message":"boom"}]}`))
 		case strings.HasSuffix(r.URL.Path, "/daily"):
-			_, _ = w.Write([]byte(`{"days":[{"date":"2026-10-01","day_type":"pushed","pushed_count":1,"new_user":5,"cancel_user":1,"cancel_rate":0.001,
+			_, _ = w.Write([]byte(`{"days":[{"date":"2026-10-01","day_type":"pushed","cadence":"daily","push_days_7d":6,"pushed_count":1,"new_user":5,"cancel_user":1,"cancel_rate":0.001,
 				"read_by_source":{"公众号消息":30},"new_by_source":{"57":3,"0":2},"msgids":["1_1","1_2"]}]}`))
 		default:
 			_, _ = w.Write([]byte(`{"msgid":"1_1","category":"快讯"}`))
@@ -60,7 +60,7 @@ func TestAnalyticsCmds(t *testing.T) {
 	}
 
 	out, err = run(t, ts.URL, "analytics", "daily", "--begin", "2026-10-01", "--end", "2026-10-01", "--format", "csv")
-	if err != nil || !strings.Contains(out, "2026-10-01,pushed,1,0,5,1,,,0.001,,30,") || !strings.Contains(out, "0:2;57:3,1_1;1_2") {
+	if err != nil || !strings.Contains(out, "2026-10-01,pushed,daily,6,1,0,5,1,,,0.001,,30,") || !strings.Contains(out, "0:2;57:3,1_1;1_2") {
 		t.Fatalf("daily csv: %s %v", out, err)
 	}
 	if _, err := run(t, ts.URL, "analytics", "daily", "--begin", "2026-10-01", "--end", "2026-10-01", "--format", "xml"); err == nil {

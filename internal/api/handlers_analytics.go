@@ -32,12 +32,11 @@ func (c storeCache) Put(api, date string, body []byte, at time.Time) {
 	_ = c.st.PutCachedDataCube(c.accountID, api, date, body, at)
 }
 
-func (s *Server) analyticsBuilder(c *gin.Context) (*analytics.Builder, bool) {
-	acc := accountFromContext(c)
+// builderFor 组装某账号的分析器（含补录信息与 SQLite 缓存）。
+func (s *Server) builderFor(acc store.Account) (*analytics.Builder, error) {
 	meta, err := s.store.ListArticleMeta(acc.ID)
 	if err != nil {
-		respondError(c, http.StatusInternalServerError, "internal", "load article meta failed")
-		return nil, false
+		return nil, err
 	}
 	return &analytics.Builder{
 		DataCube: func(api, begin, end string) (json.RawMessage, error) {
@@ -49,7 +48,16 @@ func (s *Server) analyticsBuilder(c *gin.Context) (*analytics.Builder, bool) {
 		Meta:  meta,
 		Cache: storeCache{s.store, acc.ID},
 		Now:   time.Now(),
-	}, true
+	}, nil
+}
+
+func (s *Server) analyticsBuilder(c *gin.Context) (*analytics.Builder, bool) {
+	b, err := s.builderFor(accountFromContext(c))
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "internal", "load article meta failed")
+		return nil, false
+	}
+	return b, true
 }
 
 func analyticsRange(c *gin.Context) (time.Time, time.Time, bool) {

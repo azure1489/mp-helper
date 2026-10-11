@@ -45,7 +45,7 @@ func newAnalyticsCmd() *cobra.Command {
 	var series bool
 	articles := &cobra.Command{
 		Use:   "articles",
-		Short: "按发表日期汇总每篇文章：当天 / 7 天 / 最新的阅读、来源、分享、收藏，推送打开率、推算送达人数、推送时刻",
+		Short: "按发表日期汇总每篇文章：当天 / 7 天 / 最新的阅读、来源、分享、收藏，推送打开率、推算送达人数、推送时刻；按分类、推送小时分组（分组仅 json）",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := af.check(); err != nil {
 				return err
@@ -71,7 +71,7 @@ func newAnalyticsCmd() *cobra.Command {
 	var df rangeFlags
 	daily := &cobra.Command{
 		Use:   "daily",
-		Short: "每天的新增 / 取关 / 累计关注、取关率、阅读汇总与来源、当天推送篇数，并按推送日 / 推送次日 / 不发日汇总",
+		Short: "每天的新增 / 取关 / 累计关注、取关率、阅读汇总与来源、当天推送篇数与近 7 天发文节奏；按日类型、节奏汇总并划分节奏区间（区间与汇总仅 json）",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := df.check(); err != nil {
 				return err
@@ -234,7 +234,7 @@ func writeArticlesCSV(w io.Writer, arts []types.ArticleStats) error {
 
 func writeDailyCSV(w io.Writer, ds []types.DailyStats) error {
 	cw := csv.NewWriter(w)
-	header := []string{"date", "day_type", "pushed_count", "published_count", "new_user", "cancel_user", "net_user",
+	header := []string{"date", "day_type", "cadence", "push_days_7d", "pushed_count", "published_count", "new_user", "cancel_user", "net_user",
 		"cumulate_user", "cancel_rate", "read_user", "push_read_user"}
 	for _, sc := range sceneCols {
 		header = append(header, "src_"+sc)
@@ -250,7 +250,11 @@ func writeDailyCSV(w io.Writer, ds []types.DailyStats) error {
 			}
 			return strconv.FormatInt(d.ReadBySource[k], 10)
 		}
-		row := []string{d.Date, d.DayType, strconv.Itoa(d.PushedCount), strconv.Itoa(d.PublishedCount), fmtInt(d.NewUser),
+		pushDays := ""
+		if d.PushDays7d != nil {
+			pushDays = strconv.Itoa(*d.PushDays7d)
+		}
+		row := []string{d.Date, d.DayType, d.Cadence, pushDays, strconv.Itoa(d.PushedCount), strconv.Itoa(d.PublishedCount), fmtInt(d.NewUser),
 			fmtInt(d.CancelUser), fmtInt(d.NetUser), fmtInt(d.CumulateUser), fmtFloat(d.CancelRate), fmtInt(d.ReadUser), src("公众号消息")}
 		for _, sc := range sceneCols {
 			row = append(row, src(sc))

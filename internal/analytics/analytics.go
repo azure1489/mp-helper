@@ -275,7 +275,97 @@ func (b *Builder) Articles(begin, end time.Time, series bool) (types.ArticlesRep
 		}
 		return x.MsgID < y.MsgID
 	})
+	rep.ByCategory, rep.ByPublishHour, rep.MissingPublishTime = groupArticles(rep.Articles)
 	return rep, nil
+}
+
+const uncategorized = "未分类"
+
+// groupArticles 按分类与推送小时分组汇总。推送小时只取已通知且有推送时刻的文章。
+func groupArticles(arts []types.ArticleStats) (byCat, byHour []types.GroupSummary, missing int) {
+	cats := map[string][]types.ArticleStats{}
+	hours := map[string][]types.ArticleStats{}
+	for _, a := range arts {
+		k := a.Category
+		if k == "" {
+			k = uncategorized
+		}
+		cats[k] = append(cats[k], a)
+		if !a.Notified {
+			continue
+		}
+		if a.PublishTime == nil || len(*a.PublishTime) < len(minuteLayout) {
+			missing++
+			continue
+		}
+		h := (*a.PublishTime)[11:13]
+		hours[h] = append(hours[h], a)
+	}
+	byCat = groupSummaries(cats, func(a, b string) bool {
+		if (a == uncategorized) != (b == uncategorized) {
+			return b == uncategorized
+		}
+		return a < b
+	})
+	byHour = groupSummaries(hours, func(a, b string) bool { return a < b })
+	return byCat, byHour, missing
+}
+
+func groupSummaries(groups map[string][]types.ArticleStats, less func(a, b string) bool) []types.GroupSummary {
+	keys := make([]string, 0, len(groups))
+	for k := range groups {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return less(keys[i], keys[j]) })
+	out := make([]types.GroupSummary, 0, len(keys))
+	for _, k := range keys {
+		g := types.GroupSummary{Key: k, Articles: len(groups[k])}
+		var read, push, share, coll, rate []float64
+		for _, a := range groups[k] {
+			if a.Day7 != nil {
+				read = append(read, float64(a.Day7.ReadUser))
+				push = append(push, float64(a.Day7.PushReadUser))
+				share = append(share, float64(a.Day7.ShareUser))
+				coll = append(coll, float64(a.Day7.CollectionUser))
+			}
+			if a.Notified {
+				g.NotifiedArticles++
+			}
+			if a.PushOpenRate != nil {
+				rate = append(rate, *a.PushOpenRate)
+			}
+		}
+		g.Day7Articles = len(read)
+		g.AvgDay7Read, g.MedianDay7Read = mean(read), median(read)
+		g.AvgDay7PushRead, g.AvgDay7Share, g.AvgDay7Collection = mean(push), mean(share), mean(coll)
+		g.AvgPushOpenRate, g.MedianPushOpenRate = mean(rate), median(rate)
+		out = append(out, g)
+	}
+	return out
+}
+
+func mean(xs []float64) *float64 {
+	if len(xs) == 0 {
+		return nil
+	}
+	var sum float64
+	for _, x := range xs {
+		sum += x
+	}
+	return f64(sum / float64(len(xs)))
+}
+
+func median(xs []float64) *float64 {
+	if len(xs) == 0 {
+		return nil
+	}
+	ys := append([]float64(nil), xs...)
+	sort.Float64s(ys)
+	n := len(ys)
+	if n%2 == 1 {
+		return f64(ys[n/2])
+	}
+	return f64((ys[n/2-1] + ys[n/2]) / 2)
 }
 
 func articleStats(a rawArticle, yesterday time.Time, series bool) types.ArticleStats {
@@ -387,28 +477,127 @@ func strPtr(s string) *string { return &s }
 
 // ---- 每日 ----
 
+// rangeRaw 是按日期区间返回的统计接口（getusersummary / getusercumulate / getbizsummary）的通用外形。
+type rangeRaw struct {
+	List    []json.RawMessage `json:"list"`
+	IsDelay bool              `json:"is_delay"`
+}
+
+// rangeFinal：统计日早于前天的数据视为定稿（次日 8 点后才出数，留一天余量）。
+func (b *Builder) rangeFinal(d time.Time) bool {
+	return !d.After(today(b.Now).AddDate(0, 0, -2))
+}
+
+// cachedRange 取 [begin, end] 每天的响应（只含该日的 list 项）：定稿或未过期的日期读缓存，
+// 其余按连续区间、每段最多 chunk 天调用微信，再按 ref_date 拆开逐日写回缓存。返回调用次数。
+func (b *Builder) cachedRange(api string, begin, end time.Time, chunk int, fail func(label, api string, err error)) (map[string][]byte, int) {
+	out := map[string][]byte{}
+	var missing []time.Time
+	for d := begin; !d.After(end); d = d.AddDate(0, 0, 1) {
+		ds := fmtDate(d)
+		if b.Cache != nil {
+			if body, at, ok := b.Cache.Get(api, ds); ok {
+				var r rangeRaw
+				if json.Unmarshal(body, &r) == nil && ((!r.IsDelay && b.rangeFinal(d)) || b.Now.Sub(at) < cacheTTL) {
+					out[ds] = body
+					continue
+				}
+			}
+		}
+		missing = append(missing, d)
+	}
+	calls := 0
+	for _, c := range runs(missing, chunk) {
+		calls++
+		raw, err := b.DataCube(api, fmtDate(c[0]), fmtDate(c[1]))
+		var r rangeRaw
+		if err == nil {
+			err = json.Unmarshal(raw, &r)
+		}
+		if err != nil {
+			fail(fmtDate(c[0])+"~"+fmtDate(c[1]), api, err)
+			continue
+		}
+		per := map[string][]json.RawMessage{}
+		for _, it := range r.List {
+			var k struct {
+				RefDate string `json:"ref_date"`
+			}
+			if json.Unmarshal(it, &k) == nil {
+				per[k.RefDate] = append(per[k.RefDate], it)
+			}
+		}
+		for d := c[0]; !d.After(c[1]); d = d.AddDate(0, 0, 1) {
+			ds := fmtDate(d)
+			items := per[ds]
+			if items == nil {
+				items = []json.RawMessage{}
+			}
+			body, _ := json.Marshal(rangeRaw{List: items, IsDelay: r.IsDelay})
+			out[ds] = body
+			if b.Cache != nil {
+				b.Cache.Put(api, ds, body, b.Now)
+			}
+		}
+	}
+	return out, calls
+}
+
+// runs 把升序日期切成连续区间，每段最多 size 天。
+func runs(ds []time.Time, size int) [][2]time.Time {
+	var out [][2]time.Time
+	for i := 0; i < len(ds); {
+		j := i
+		for j+1 < len(ds) && j+1-i < size && ds[j+1].Equal(ds[j].AddDate(0, 0, 1)) {
+			j++
+		}
+		out = append(out, [2]time.Time{ds[i], ds[j]})
+		i = j + 1
+	}
+	return out
+}
+
+// cadenceOf 由近 7 天推送天数判定发文节奏。
+func cadenceOf(n int) string {
+	switch {
+	case n >= 6:
+		return "daily"
+	case n >= 3:
+		return "every_other_day"
+	case n >= 1:
+		return "sparse"
+	}
+	return "none"
+}
+
 // Daily 汇总 [begin, end] 每天的粉丝增减、阅读汇总与发文情况。所有接口都失败时返回首个错误。
 func (b *Builder) Daily(begin, end time.Time) (types.DailyReport, error) {
-	rep := types.DailyReport{Begin: fmtDate(begin), End: fmtDate(end), Days: []types.DailyStats{}, Summary: []types.DayTypeSummary{}, Warnings: []types.AnalyticsWarning{}}
-	// 多取前一天：算推送次日与取关率（÷ 前一天累计关注）。
-	from := begin
-	if prev := begin.AddDate(0, 0, -1); !prev.Before(MinDate) {
-		from = prev
+	rep := types.DailyReport{Begin: fmtDate(begin), End: fmtDate(end), Days: []types.DailyStats{}, Summary: []types.DayTypeSummary{},
+		ByCadence: []types.CadenceSummary{}, CadencePeriods: []types.CadencePeriod{}, Warnings: []types.AnalyticsWarning{}}
+	clamp := func(d time.Time) time.Time {
+		if d.Before(MinDate) {
+			return MinDate
+		}
+		return d
 	}
+	// 多取前一天算推送次日与取关率（÷ 前一天累计关注）；推送情况再往前多取 6 天算近 7 天节奏。
+	from := clamp(begin.AddDate(0, 0, -1))
+	pushFrom := clamp(begin.AddDate(0, 0, -6))
 	var firstErr error
 	calls, failed := 0, 0
-	fail := func(date, api string, err error) {
+	fail := func(label, api string, err error) {
 		failed++
 		if firstErr == nil {
 			firstErr = err
 		}
-		rep.Warnings = append(rep.Warnings, warn(date, api, err))
+		rep.Warnings = append(rep.Warnings, warn(label, api, err))
 	}
 
 	pushed := map[string]int{}
 	published := map[string]int{}
 	msgids := map[string][]string{}
-	for d := from; !d.After(end); d = d.AddDate(0, 0, 1) {
+	known := map[string]bool{} // 推送情况已知的日期
+	for d := pushFrom; !d.After(end); d = d.AddDate(0, 0, 1) {
 		calls++
 		r, err := b.totalDetail(d)
 		if err != nil {
@@ -417,6 +606,7 @@ func (b *Builder) Daily(begin, end time.Time) (types.DailyReport, error) {
 		}
 		rep.IsDelay = rep.IsDelay || r.IsDelay
 		ds := fmtDate(d)
+		known[ds] = true
 		for _, a := range r.List {
 			published[ds]++
 			if a.PublishType == 0 {
@@ -426,18 +616,22 @@ func (b *Builder) Daily(begin, end time.Time) (types.DailyReport, error) {
 		}
 	}
 
+	userBodies, n := b.cachedRange(apiUserSummary, begin, end, 7, fail)
+	calls += n
+	cumulBodies, n := b.cachedRange(apiUserCumul, from, end, 7, fail)
+	calls += n
+	bizBodies, n := b.cachedRange(apiBizSummary, begin, end, 30, fail)
+	calls += n
+	if failed > 0 && failed == calls {
+		return rep, firstErr
+	}
+
 	newU, cancelU := map[string]int64{}, map[string]int64{}
 	newBySrc := map[string]map[string]int64{}
 	hasSummary := map[string]bool{}
-	for _, c := range chunks(begin, end, 7) {
-		calls++
-		raw, err := b.DataCube(apiUserSummary, fmtDate(c[0]), fmtDate(c[1]))
+	for _, body := range userBodies {
 		var r rawUserSummary
-		if err == nil {
-			err = json.Unmarshal(raw, &r)
-		}
-		if err != nil {
-			fail(fmtDate(c[0])+"~"+fmtDate(c[1]), apiUserSummary, err)
+		if json.Unmarshal(body, &r) != nil {
 			continue
 		}
 		for _, x := range r.List {
@@ -454,15 +648,9 @@ func (b *Builder) Daily(begin, end time.Time) (types.DailyReport, error) {
 	}
 
 	cumul := map[string]int64{}
-	for _, c := range chunks(from, end, 7) {
-		calls++
-		raw, err := b.DataCube(apiUserCumul, fmtDate(c[0]), fmtDate(c[1]))
+	for _, body := range cumulBodies {
 		var r rawUserCumulate
-		if err == nil {
-			err = json.Unmarshal(raw, &r)
-		}
-		if err != nil {
-			fail(fmtDate(c[0])+"~"+fmtDate(c[1]), apiUserCumul, err)
+		if json.Unmarshal(body, &r) != nil {
 			continue
 		}
 		for _, x := range r.List {
@@ -475,24 +663,15 @@ func (b *Builder) Daily(begin, end time.Time) (types.DailyReport, error) {
 		src                           map[string]int64
 	}
 	bizByDate := map[string]biz{}
-	for _, c := range chunks(begin, end, 30) {
-		calls++
-		raw, err := b.DataCube(apiBizSummary, fmtDate(c[0]), fmtDate(c[1]))
+	for _, body := range bizBodies {
 		var r rawBizSummary
-		if err == nil {
-			err = json.Unmarshal(raw, &r)
-		}
-		if err != nil {
-			fail(fmtDate(c[0])+"~"+fmtDate(c[1]), apiBizSummary, err)
+		if json.Unmarshal(body, &r) != nil {
 			continue
 		}
 		rep.IsDelay = rep.IsDelay || r.IsDelay
 		for _, x := range r.List {
 			bizByDate[x.RefDate] = biz{x.Detail.ReadUser, x.Detail.ShareUser, x.Detail.CollectionUser, x.Detail.SendPageCount, sources(x.Detail.ReadUserSource)}
 		}
-	}
-	if failed == calls {
-		return rep, firstErr
 	}
 
 	for d := begin; !d.After(end); d = d.AddDate(0, 0, 1) {
@@ -508,6 +687,19 @@ func (b *Builder) Daily(begin, end time.Time) (types.DailyReport, error) {
 			day.DayType = "day_after_push"
 		default:
 			day.DayType = "quiet"
+		}
+		if w := d.AddDate(0, 0, -6); !w.Before(MinDate) {
+			n, complete := 0, true
+			for x := w; !x.After(d); x = x.AddDate(0, 0, 1) {
+				complete = complete && known[fmtDate(x)]
+				if pushed[fmtDate(x)] > 0 {
+					n++
+				}
+			}
+			if complete {
+				day.PushDays7d = &n
+				day.Cadence = cadenceOf(n)
+			}
 		}
 		c, hasCumul := cumul[ds]
 		if hasCumul {
@@ -530,55 +722,55 @@ func (b *Builder) Daily(begin, end time.Time) (types.DailyReport, error) {
 		}
 		rep.Days = append(rep.Days, day)
 	}
-	rep.Summary = summarize(rep.Days)
+
+	for _, dt := range []string{"pushed", "day_after_push", "quiet"} {
+		a := average(rep.Days, func(d types.DailyStats) bool { return d.DayType == dt })
+		rep.Summary = append(rep.Summary, types.DayTypeSummary{DayType: dt, Days: a.days, AvgNewUser: a.new, AvgCancelUser: a.cancel, AvgCancelRate: a.rate})
+	}
+	for _, cd := range []string{"daily", "every_other_day", "sparse", "none"} {
+		a := average(rep.Days, func(d types.DailyStats) bool { return d.Cadence == cd })
+		rep.ByCadence = append(rep.ByCadence, types.CadenceSummary{Cadence: cd, Days: a.days, AvgNewUser: a.new, AvgCancelUser: a.cancel, AvgCancelRate: a.rate})
+	}
+	for i := 0; i < len(rep.Days); {
+		j := i
+		for j+1 < len(rep.Days) && rep.Days[j+1].Cadence == rep.Days[i].Cadence {
+			j++
+		}
+		if cd := rep.Days[i].Cadence; cd != "" {
+			run := rep.Days[i : j+1]
+			a := average(run, func(types.DailyStats) bool { return true })
+			rep.CadencePeriods = append(rep.CadencePeriods, types.CadencePeriod{Cadence: cd, Begin: run[0].Date, End: run[len(run)-1].Date,
+				Days: a.days, AvgNewUser: a.new, AvgCancelUser: a.cancel, AvgCancelRate: a.rate})
+		}
+		i = j + 1
+	}
 	return rep, nil
 }
 
-func summarize(ds []types.DailyStats) []types.DayTypeSummary {
-	var out []types.DayTypeSummary
-	for _, dt := range []string{"pushed", "day_after_push", "quiet"} {
-		s := types.DayTypeSummary{DayType: dt}
-		var n, nr int
-		var newSum, cancelSum int64
-		var rateSum float64
-		for _, d := range ds {
-			if d.DayType != dt {
-				continue
-			}
-			s.Days++
-			if d.NewUser != nil {
-				n++
-				newSum += *d.NewUser
-				cancelSum += *d.CancelUser
-			}
-			if d.CancelRate != nil {
-				nr++
-				rateSum += *d.CancelRate
-			}
-		}
-		if n > 0 {
-			s.AvgNewUser = f64(float64(newSum) / float64(n))
-			s.AvgCancelUser = f64(float64(cancelSum) / float64(n))
-		}
-		if nr > 0 {
-			s.AvgCancelRate = f64(rateSum / float64(nr))
-		}
-		out = append(out, s)
-	}
-	return out
+type avgStats struct {
+	days              int
+	new, cancel, rate *float64
 }
 
-// chunks 把 [b, e] 切成每段最多 size 天的区间。
-func chunks(b, e time.Time, size int) [][2]time.Time {
-	var out [][2]time.Time
-	for s := b; !s.After(e); s = s.AddDate(0, 0, size) {
-		t := s.AddDate(0, 0, size-1)
-		if t.After(e) {
-			t = e
+// average 对满足条件的日期求平均新增、取关（有用户数据的日子）与取关率（有取关率的日子）。
+func average(ds []types.DailyStats, keep func(types.DailyStats) bool) avgStats {
+	var a avgStats
+	var news, cancels, rates []float64
+	for _, d := range ds {
+		if !keep(d) {
+			continue
 		}
-		out = append(out, [2]time.Time{s, t})
+		a.days++
+		if d.NewUser != nil {
+			news = append(news, float64(*d.NewUser))
+			cancels = append(cancels, float64(*d.CancelUser))
+		}
+		if d.CancelRate != nil {
+			rates = append(rates, *d.CancelRate)
+		}
 	}
-	return out
+	a.new, a.cancel, a.rate = mean(news), mean(cancels), mean(rates)
+	return a
 }
 
 func i64(v int64) *int64     { return &v }

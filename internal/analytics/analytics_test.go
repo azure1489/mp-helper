@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/azure1489/mp-helper/internal/store"
+	"github.com/azure1489/mp-helper/internal/types"
 )
 
 // now = 2026-10-12 10:00 北京时间，昨天为 2026-10-11。
@@ -211,9 +212,106 @@ func TestDaily(t *testing.T) {
 	if s := rep.Summary[0]; s.DayType != "pushed" || s.Days != 1 || *s.AvgNewUser != 25 {
 		t.Fatalf("summary: %+v", rep.Summary)
 	}
-	// 取数：前一天 + 4 天的单篇明细，增减 1 段，累计从前一天起 1 段，汇总 1 段。
-	if len(f.calls) != 8 {
+	// 取数：前 6 天 + 4 天的单篇明细（算近 7 天节奏），增减 1 段，累计从前一天起 1 段，汇总 1 段。
+	if len(f.calls) != 13 {
 		t.Fatalf("calls: %v", f.calls)
+	}
+	// 近 7 天只有 10-02 推送 → sparse；整段节奏相同，合成一个区间。
+	if p := rep.Days[0].PushDays7d; p == nil || *p != 1 || rep.Days[0].Cadence != "sparse" {
+		t.Fatalf("cadence: %+v", rep.Days[0])
+	}
+	if len(rep.CadencePeriods) != 1 || rep.CadencePeriods[0].Begin != "2026-10-02" || rep.CadencePeriods[0].Days != 4 {
+		t.Fatalf("periods: %+v", rep.CadencePeriods)
+	}
+	if c := rep.ByCadence[2]; c.Cadence != "sparse" || c.Days != 4 || *c.AvgNewUser != 28.0/3 {
+		t.Fatalf("by cadence: %+v", rep.ByCadence)
+	}
+
+	// 再查一次：定稿日期全部命中缓存（memCache），只有未定稿的日期重新调用。
+	c := memCache{}
+	b.Cache = c
+	f.calls = nil
+	_, _ = b.Daily(day("2026-10-02"), day("2026-10-05"))
+	first := len(f.calls)
+	b.Now = now.Add(2 * time.Hour)
+	f.calls = nil
+	_, _ = b.Daily(day("2026-10-02"), day("2026-10-05"))
+	// 增减 / 累计 / 汇总的日期都已定稿（≤ 10-10）→ 全部命中；单篇明细仍在 30 天统计期内 → 过期重取。
+	for _, call := range f.calls {
+		if !strings.HasPrefix(call, apiTotalDetail) {
+			t.Fatalf("final range dates should be cached, got %v", f.calls)
+		}
+	}
+	if first != 13 || len(f.calls) != 10 {
+		t.Fatalf("first=%d second=%v", first, f.calls)
+	}
+}
+
+func TestCadenceAndRuns(t *testing.T) {
+	for n, want := range map[int]string{0: "none", 1: "sparse", 2: "sparse", 3: "every_other_day", 5: "every_other_day", 6: "daily", 7: "daily"} {
+		if got := cadenceOf(n); got != want {
+			t.Fatalf("cadenceOf(%d)=%s want %s", n, got, want)
+		}
+	}
+	ds := []time.Time{day("2026-10-01"), day("2026-10-02"), day("2026-10-03"), day("2026-10-05"), day("2026-10-06")}
+	got := runs(ds, 2)
+	want := [][2]string{{"2026-10-01", "2026-10-02"}, {"2026-10-03", "2026-10-03"}, {"2026-10-05", "2026-10-06"}}
+	if len(got) != len(want) {
+		t.Fatalf("runs: %v", got)
+	}
+	for i := range want {
+		if fmtDate(got[i][0]) != want[i][0] || fmtDate(got[i][1]) != want[i][1] {
+			t.Fatalf("runs[%d]=%v want %v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestCachedRangeSplitsAndRefetchesMissing(t *testing.T) {
+	f := &fakeCube{resp: map[string]string{
+		"getusersummary 2026-10-01": `{"list":[{"ref_date":"2026-10-01","new_user":1},{"ref_date":"2026-10-03","new_user":3}]}`,
+		"getusersummary 2026-10-11": `{"list":[]}`,
+	}}
+	c := memCache{}
+	b := &Builder{DataCube: f.DataCube, Cache: c, Now: now}
+	noFail := func(string, string, error) { t.Fatal("unexpected failure") }
+	out, n := b.cachedRange(apiUserSummary, day("2026-10-01"), day("2026-10-03"), 7, noFail)
+	if n != 1 || len(out) != 3 || !strings.Contains(string(out["2026-10-03"]), `"new_user":3`) || strings.Contains(string(out["2026-10-01"]), "10-03") {
+		t.Fatalf("split: n=%d out=%v", n, out)
+	}
+	// 10-02 已缓存且定稿；扩展到 10-01–10-11，只有 10-04–10-11 缺失 → 一段调用（不超过 7 天则分两段）。
+	f.calls = nil
+	_, n = b.cachedRange(apiUserSummary, day("2026-10-01"), day("2026-10-11"), 7, noFail)
+	if n != 2 || f.calls[0] != "getusersummary 2026-10-04 2026-10-10" || f.calls[1] != "getusersummary 2026-10-11 2026-10-11" {
+		t.Fatalf("refetch: n=%d calls=%v", n, f.calls)
+	}
+}
+
+func TestGroupArticles(t *testing.T) {
+	snap := func(read, push int64) *types.ArticleSnapshot {
+		return &types.ArticleSnapshot{ReadUser: read, PushReadUser: push}
+	}
+	rate := func(v float64) *float64 { return &v }
+	tm := func(s string) *string { return &s }
+	arts := []types.ArticleStats{
+		{MsgID: "1_1", Category: "攻略", Notified: true, Day7: snap(100, 10), PushOpenRate: rate(0.02), PublishTime: tm("2026-10-01 21:00")},
+		{MsgID: "2_1", Category: "攻略", Notified: true, Day7: snap(300, 30), PushOpenRate: rate(0.04), PublishTime: tm("2026-10-02 21:30")},
+		{MsgID: "3_1", Category: "攻略", Notified: true, Day7: snap(1000, 50), PushOpenRate: rate(0.03), PublishTime: tm("2026-10-03 08:00")},
+		{MsgID: "4_1", Notified: true, PushOpenRate: rate(0.01)},                               // 未分类、未满 7 天、无推送时刻
+		{MsgID: "5_1", Category: "快讯", Day7: snap(50, 0), PublishTime: tm("2026-10-04 12:00")}, // 未通知：不进推送小时
+	}
+	byCat, byHour, missing := groupArticles(arts)
+	if len(byCat) != 3 || byCat[0].Key != "快讯" || byCat[1].Key != "攻略" || byCat[2].Key != "未分类" {
+		t.Fatalf("category order: %+v", byCat)
+	}
+	g := byCat[1]
+	if g.Articles != 3 || g.Day7Articles != 3 || *g.AvgDay7Read != 1400.0/3 || *g.MedianDay7Read != 300 || *g.MedianPushOpenRate != 0.03 {
+		t.Fatalf("攻略: %+v", g)
+	}
+	if u := byCat[2]; u.Day7Articles != 0 || u.AvgDay7Read != nil || *u.AvgPushOpenRate != 0.01 {
+		t.Fatalf("未分类: %+v", u)
+	}
+	if missing != 1 || len(byHour) != 2 || byHour[0].Key != "08" || byHour[1].Key != "21" || byHour[1].Articles != 2 || *byHour[1].AvgPushOpenRate != 0.03 {
+		t.Fatalf("by hour: missing=%d %+v", missing, byHour)
 	}
 }
 
@@ -222,5 +320,41 @@ func TestDailyAllFail(t *testing.T) {
 	b := &Builder{DataCube: func(string, string, string) (json.RawMessage, error) { return nil, e }, Now: now}
 	if _, err := b.Daily(day("2026-10-02"), day("2026-10-03")); err != e {
 		t.Fatalf("want error, got %v", err)
+	}
+}
+
+func TestArchive(t *testing.T) {
+	f := &fakeCube{}
+	c := memCache{}
+	b := &Builder{DataCube: f.DataCube, Cache: c, Now: now}
+	// MinDate(2025-11-01)–昨天(2026-10-11) 共 345 天：增减 / 累计各 50 段，汇总 12 段，单篇明细 345 天。
+	calls, failed, stopped := b.Archive(100)
+	if calls != 100 || failed != 0 || stopped != errBudget.Error() {
+		t.Fatalf("first run: calls=%d failed=%d stopped=%q", calls, failed, stopped)
+	}
+	calls, _, stopped = b.Archive(1000)
+	if stopped != "" || calls != 50+50+12+345-100 {
+		t.Fatalf("second run should finish the backlog: calls=%d stopped=%q", calls, stopped)
+	}
+	// 第三次：定稿数据都在缓存，未定稿的也还在 1 小时有效期内 → 不调用。
+	if calls, _, _ = b.Archive(1000); calls != 0 {
+		t.Fatalf("third run within TTL should not call: %d", calls)
+	}
+	// 一小时后：未定稿部分重取 —— 区间接口只有昨天（各 1 段），单篇明细为发表未满统计期的 09-12–10-11（30 天）。
+	b.Now = now.Add(2 * time.Hour)
+	if calls, _, _ = b.Archive(1000); calls != 3+30 {
+		t.Fatalf("refresh run: calls=%d", calls)
+	}
+}
+
+func TestArchiveStopsOnUnauthorized(t *testing.T) {
+	n := 0
+	b := &Builder{DataCube: func(string, string, string) (json.RawMessage, error) {
+		n++
+		return nil, errors.New("DataCube Error , errcode=48001 , errmsg=api unauthorized")
+	}, Cache: memCache{}, Now: now}
+	calls, failed, stopped := b.Archive(1000)
+	if n != 1 || calls != 1 || failed != 1 || !strings.Contains(stopped, "48001") {
+		t.Fatalf("n=%d calls=%d failed=%d stopped=%q", n, calls, failed, stopped)
 	}
 }

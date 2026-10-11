@@ -51,13 +51,35 @@ type AnalyticsWarning struct {
 	WechatErrcode int64  `json:"wechat_errcode,omitempty"`
 }
 
+// GroupSummary 是一组文章（同一分类或同一推送小时）的平均表现。
+// 7 天指标只统计已满 7 天的文章；打开率只统计已通知且有送达率的文章。
+type GroupSummary struct {
+	Key                string   `json:"key"`
+	Articles           int      `json:"articles"`
+	Day7Articles       int      `json:"day7_articles"`
+	AvgDay7Read        *float64 `json:"avg_day7_read"`
+	MedianDay7Read     *float64 `json:"median_day7_read"`
+	AvgDay7PushRead    *float64 `json:"avg_day7_push_read"`
+	AvgDay7Share       *float64 `json:"avg_day7_share"`
+	AvgDay7Collection  *float64 `json:"avg_day7_collection"`
+	NotifiedArticles   int      `json:"notified_articles"`
+	AvgPushOpenRate    *float64 `json:"avg_push_open_rate"`
+	MedianPushOpenRate *float64 `json:"median_push_open_rate"`
+}
+
 // ArticlesReport 是 GET /api/v1/analytics/articles 的返回。
 type ArticlesReport struct {
-	Begin    string             `json:"begin"`
-	End      string             `json:"end"`
-	IsDelay  bool               `json:"is_delay"`
-	Articles []ArticleStats     `json:"articles"`
-	Warnings []AnalyticsWarning `json:"warnings"`
+	Begin    string         `json:"begin"`
+	End      string         `json:"end"`
+	IsDelay  bool           `json:"is_delay"`
+	Articles []ArticleStats `json:"articles"`
+	// ByCategory 按补录的分类分组（未补录的归入「未分类」）。
+	ByCategory []GroupSummary `json:"by_category"`
+	// ByPublishHour 按推送时刻的小时（"00"–"23"）分组，只含已通知且有推送时刻的文章。
+	ByPublishHour []GroupSummary `json:"by_publish_hour"`
+	// MissingPublishTime 是已通知但没有推送时刻、未计入 ByPublishHour 的篇数。
+	MissingPublishTime int                `json:"missing_publish_time"`
+	Warnings           []AnalyticsWarning `json:"warnings"`
 }
 
 // DailyStats 是账号某一天的粉丝增减、阅读汇总与发文情况。
@@ -79,6 +101,10 @@ type DailyStats struct {
 	PushedCount    int              `json:"pushed_count"`    // 当天发表且已通知的篇数
 	PublishedCount int              `json:"published_count"` // 当天发表的篇数（含未通知）
 	MsgIDs         []string         `json:"msgids"`
+	// PushDays7d 是截至当天的近 7 天（含当天）有推送的天数；窗口有缺数时为 null。
+	PushDays7d *int `json:"push_days_7d"`
+	// Cadence 由 PushDays7d 判定：daily（≥6）、every_other_day（3–5）、sparse（1–2）、none（0）；未知为空。
+	Cadence string `json:"cadence,omitempty"`
 }
 
 // DayTypeSummary 按 day_type 汇总的平均粉丝增减。
@@ -90,14 +116,53 @@ type DayTypeSummary struct {
 	AvgCancelRate *float64 `json:"avg_cancel_rate"`
 }
 
+// CadenceSummary 按发文节奏汇总的平均粉丝增减。
+type CadenceSummary struct {
+	Cadence       string   `json:"cadence"`
+	Days          int      `json:"days"`
+	AvgNewUser    *float64 `json:"avg_new_user"`
+	AvgCancelUser *float64 `json:"avg_cancel_user"`
+	AvgCancelRate *float64 `json:"avg_cancel_rate"`
+}
+
+// CadencePeriod 是一段节奏相同的连续日期。
+type CadencePeriod struct {
+	Cadence       string   `json:"cadence"`
+	Begin         string   `json:"begin"`
+	End           string   `json:"end"`
+	Days          int      `json:"days"`
+	AvgNewUser    *float64 `json:"avg_new_user"`
+	AvgCancelUser *float64 `json:"avg_cancel_user"`
+	AvgCancelRate *float64 `json:"avg_cancel_rate"`
+}
+
 // DailyReport 是 GET /api/v1/analytics/daily 的返回。
 type DailyReport struct {
-	Begin    string             `json:"begin"`
-	End      string             `json:"end"`
-	IsDelay  bool               `json:"is_delay"`
-	Days     []DailyStats       `json:"days"`
-	Summary  []DayTypeSummary   `json:"summary"`
-	Warnings []AnalyticsWarning `json:"warnings"`
+	Begin          string             `json:"begin"`
+	End            string             `json:"end"`
+	IsDelay        bool               `json:"is_delay"`
+	Days           []DailyStats       `json:"days"`
+	Summary        []DayTypeSummary   `json:"summary"`
+	ByCadence      []CadenceSummary   `json:"by_cadence"`
+	CadencePeriods []CadencePeriod    `json:"cadence_periods"`
+	Warnings       []AnalyticsWarning `json:"warnings"`
+}
+
+// ArchiveAccountResult 是一次存档中单个账号的结果。
+type ArchiveAccountResult struct {
+	AccountID int64  `json:"account_id"`
+	Name      string `json:"name"`
+	Calls     int    `json:"calls"`             // 实际调用微信的次数
+	Failed    int    `json:"failed"`            // 其中失败的次数
+	Stopped   string `json:"stopped,omitempty"` // 提前停止的原因（次数用完、无权限、配额耗尽）
+}
+
+// ArchiveStatus 是 GET /admin/archive 的返回。
+type ArchiveStatus struct {
+	Running      bool                   `json:"running"`
+	LastStarted  string                 `json:"last_started,omitempty"`
+	LastFinished string                 `json:"last_finished,omitempty"`
+	Results      []ArchiveAccountResult `json:"results"`
 }
 
 // ArticleMetaRequest 是 PUT /api/v1/articles/:msgid/meta 的请求体；省略的字段保留原值。

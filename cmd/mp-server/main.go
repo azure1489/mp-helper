@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -36,6 +37,9 @@ func main() {
 
 	mgr := wechat.NewManager(cache.NewMemory())
 	srv := api.NewServer(cfg, st, mgr)
+	if cfg.Archive.Enabled {
+		go srv.StartArchiver(context.Background())
+	}
 
 	log.Printf("mp-server listening on %s (db=%s)", cfg.Listen, cfg.DBPath)
 	if err := http.ListenAndServe(cfg.Listen, srv.Router()); err != nil {

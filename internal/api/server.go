@@ -14,6 +14,8 @@ type Server struct {
 	cfg    *config.Config
 	store  *store.Store
 	wechat wechat.Service
+
+	archive archiveState
 }
 
 func NewServer(cfg *config.Config, s *store.Store, w wechat.Service) *Server {
@@ -56,6 +58,8 @@ func (s *Server) Router() *gin.Engine {
 	admin.POST("/accounts/:id/keys", s.handleCreateKey)
 	admin.GET("/keys", s.handleListKeys)
 	admin.DELETE("/keys/:id", s.handleRevokeKey)
+	admin.POST("/archive/run", s.handleRunArchive)
+	admin.GET("/archive", s.handleArchiveStatus)
 
 	return r
 }

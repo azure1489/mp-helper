@@ -10,7 +10,7 @@ description: >-
   草稿箱）；③ 回读草稿箱、查询已发布图文与数据统计（只读）；④ 公众号数据分析：单篇文章表现（阅读、来源、分享、收藏、7 天数据、推送打开率、送达人数）、每日涨粉掉粉与发文节奏、推送时段对比；⑤ 健康检查。一把 API Key 对应一个公众号。不要用于：直接群发/正式发布给粉丝
   （本 skill 只到草稿箱）、视频/语音素材、公众号菜单/自动回复/客服/模板消息/IP白名单等
   配置、微信个人号或好友群发、其它平台（微博/小红书）、微信小程序/企业微信/微信支付。
-version: 1.3.0
+version: 1.4.0
 required_environment_variables:
   - name: MP_HELPER_API_URL
     prompt: mp-helper 服务地址（mp-server 的 https 地址）
@@ -130,16 +130,26 @@ appid/secret 与 access_token）。
    ```bash
    mp-cli analytics articles --begin 2026-09-11 --end 2026-10-11
    ```
-2. 补推送时刻：`notified` 为 true 但 `publish_time` 为 null 的文章，把标题和发表日期列给用户，问当时几点推送的，再逐篇补录：
+2. 补推送时刻（做「几点发好」时需要）：`notified` 为 true 但 `publish_time` 为 null 的文章（个数见 `missing_publish_time`），把标题和发表日期列给用户，问当时几点推送的，再逐篇补录：
    ```bash
    mp-cli article meta set 2247549594_1 --published-at "2026-10-05 21:00"
    ```
-   用户记不清就跳过，分析时说明这些文章没有计入时段对比。分类也可以顺手补：`--category 攻略`。
-3. 拉每日数据（同样最多 31 天一次）：
+   用户记不清就跳过，分析时说明这些文章没有计入时段对比。
+3. 补分类（做「哪类内容受欢迎」时需要）：先问用户用哪几类（如攻略 / 快讯 / 专题）；按标题给每篇拟一个分类，**列表给用户确认或修改后**再逐篇写入，不要未经确认直接写：
+   ```bash
+   mp-cli article meta set 2247549594_1 --category 攻略
+   ```
+   补录完重新执行第 1 步，`by_category` 就是按分类的对比。已补录的可用 `mp-cli article meta list` 查看；录错了重新 `set` 覆盖。
+4. 拉每日数据（同样最多 31 天一次；更早的 6 天会自动多取，用来判定节奏）：
    ```bash
    mp-cli analytics daily --begin 2026-09-11 --end 2026-10-11
    ```
-4. 分析。数据多时用 `--format csv` 导出成表格再算。
+5. 分析：
+   - 哪类内容受欢迎 → `by_category`，以 `median_day7_read` 为主（平均值容易被单篇爆款拉高），再看 `avg_push_open_rate`、分享、收藏。
+   - 几点发好 → `by_publish_hour`，比较各小时的 `avg_push_open_rate` / `median_push_open_rate`，同时报每组篇数。
+   - 涨粉掉粉与发文 → `summary`（推送日 / 次日 / 不发日）。
+   - 隔天发和每天发 → `by_cadence` 与 `cadence_periods`，比较 `daily` 和 `every_other_day` 的平均取关率。
+   - 数据多时用 `--format csv` 导出成表格再算（分组与汇总只在 json 里）。
 
 ### 字段口径
 
@@ -156,11 +166,18 @@ appid/secret 与 access_token）。
 | `cancel_rate` | 当天取关 ÷ 前一天累计关注 |
 | `new_by_source` | 新增关注按微信 `user_source` 编码拆分 |
 | `summary` | 按 `day_type` 的平均新增、取关、取关率 |
+| `by_category` | 按补录分类分组（未补录的归入「未分类」）：篇数、已满 7 天的篇数、7 天阅读的平均与中位数、7 天推送阅读 / 分享 / 收藏平均、推送打开率的平均与中位数 |
+| `by_publish_hour` | 按推送时刻的小时（`"00"`–`"23"`）分组，字段同上；只含已通知且有推送时刻的文章 |
+| `missing_publish_time` | 已通知但没有推送时刻、未计入 `by_publish_hour` 的篇数 |
+| `push_days_7d` / `cadence` | 截至当天近 7 天（含当天）有推送的天数；节奏 `daily`（≥6 天）、`every_other_day`（3–5 天，即隔天发）、`sparse`（1–2 天）、`none`（0 天）；数据不全时为空 |
+| `by_cadence` | 按节奏的平均新增、取关、取关率 |
+| `cadence_periods` | 节奏相同的连续日期区间及各区间的平均新增、取关、取关率 |
 
 ### 必须告诉用户的限制
 
 - **没有按小时的数据**：微信已下线分时接口，看不了粉丝一天里几点在读。「几点发好」只能拿补录的推送时刻对比各篇的 `push_open_rate`，样本少时结论只能参考。
-- 取关无法归到具体某篇文章，`daily` 只能看相关性；隔天发和每天发要各积累几周数据才有比较意义。
+- 取关无法归到具体某篇文章，`daily` 只能看相关性；隔天发和每天发要各积累几周数据才有比较意义，`by_cadence` 里某类只有几天时要明说样本太少。
+- 分组对比要同时报篇数 / 天数；某组只有一两篇时不要下结论。
 - 统计数据从 2025-11-01 开始；每篇只统计发表后 30 天；次日 8 点后再查前一天，`is_delay` 为 true 表示数据还没出全。
 - 返回里的 `warnings` 是个别日期取数失败或还没出数，其余数据照常可用，要在结论里提到。
 

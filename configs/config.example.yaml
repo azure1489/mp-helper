@@ -13,3 +13,10 @@ cache:
 
 # 请求微信的全局超时（秒）
 wechat_timeout_seconds: 30
+
+# 每日统计存档：每天北京时间 time 把各公众号缺失或未定稿的统计数据补进本地库，
+# 首次启用时从 2025-11-01 起逐日回补；max_calls 为每个公众号每次最多调用微信的次数。
+archive:
+  enabled: true
+  time: "09:30"
+  max_calls: 200
